@@ -6,13 +6,11 @@
         :root { --accent: #00f2ff; --bg: #0a0a0a; }
         body { font-family: 'Orbitron', sans-serif; background: var(--bg); color: #fff; margin: 0; overflow: hidden; }
         
-        /* Screens */
         #auth-screen, #end-screen { 
             position: fixed; inset: 0; background: #000;
             display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000;
         }
 
-        /* Draggable Control Panel */
         #ui-layer { 
             position: fixed; top: 20px; left: 20px; background: rgba(30, 30, 35, 0.95); 
             padding: 20px; border-radius: 12px; z-index: 500; border: 1px solid rgba(255,255,255,0.1);
@@ -30,18 +28,16 @@
         }
 
         .dot { width: 8px; height: 8px; background: #555; border-radius: 50%; }
-        .line { background: #1a1a1a; cursor: pointer; transition: background 0.2s; }
+        .line { background: #1a1a1a; cursor: pointer; }
         .line:hover:not(.taken) { background: #333; }
         .line.h { width: 50px; height: 8px; border-radius: 4px; }
         .line.v { width: 8px; height: 50px; border-radius: 4px; }
         .line.taken { box-shadow: 0 0 10px currentColor; z-index: 2; }
         .box { width: 50px; height: 50px; transition: background 0.4s; border-radius: 4px; }
 
-        /* Remote Cursors */
         .remote-cursor { position: absolute; width: 12px; height: 12px; border-radius: 50%; pointer-events: none; z-index: 1000; }
         .cursor-label { position: absolute; top: -22px; left: 10px; font-size: 10px; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
 
-        /* UI Elements */
         button { background: var(--accent); border: none; color: #000; padding: 12px; border-radius: 6px; cursor: pointer; font-family: 'Orbitron'; font-weight: bold; width: 100%; margin-top: 8px; }
         input { background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; margin-bottom: 8px; width: calc(100% - 22px); font-family: 'Orbitron'; }
         .status-box { border-left: 4px solid var(--accent); padding-left: 10px; margin-bottom: 20px; }
@@ -54,40 +50,35 @@
     <div id="auth-screen">
         <h1 style="color: var(--accent);">DOTS AND BOXES</h1>
         <input type="text" id="username" placeholder="Enter Name">
-        <button onclick="login()" style="width: 220px;">Play Game</button>
+        <button id="play-btn" onclick="login()">Play Game</button>
     </div>
 
     <div id="end-screen" style="display:none">
         <h1>Game Over</h1>
-        <div id="final-stats" style="margin-bottom: 20px;"></div>
-        <button onclick="location.reload()" style="width: 220px;">Play Again</button>
+        <div id="final-stats"></div>
+        <button onclick="location.reload()">Play Again</button>
     </div>
 
     <div id="game-screen" style="display:none">
         <div id="ui-layer">
             <div class="status-box">
                 <small>Turn</small>
-                <div id="turn-display" style="font-weight: bold; font-size: 18px;">---</div>
+                <div id="turn-display">---</div>
             </div>
-
-            <div id="party-ui">
+            <div id="room-controls">
                 <button onclick="createRoom()">Create Room</button>
                 <input type="text" id="room-input" placeholder="Room Code" maxlength="6" style="margin-top: 10px;">
                 <button onclick="joinRoom()">Join Room</button>
             </div>
-
-            <div id="active-info" style="display:none; text-align: center; margin-top: 10px;">
+            <div id="active-info" style="display:none; text-align: center;">
                 Room: <b id="room-id" style="color: var(--accent);"></b>
             </div>
-            
             <div style="margin-top:20px;">
                 <label style="font-size: 9px; opacity: 0.6;">ZOOM LEVEL</label>
-                <input type="range" id="zoom-range" min="0.1" max="2.0" step="0.01" value="1.0" oninput="setZoom(this.value)" style="width:100%">
+                <input type="range" id="zoom-range" min="0.1" max="2.0" step="0.01" value="1.0" oninput="setZoom(this.value)">
             </div>
-
             <div id="scoreboard"></div>
         </div>
-        
         <div id="board-container">
             <div id="board"></div>
         </div>
@@ -96,62 +87,42 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myName, myRoom, isMyTurn = false, boxesLeft = 625; // 25x25
+        let myName, myRoom, isMyTurn = false, boxesLeft = 625;
         let px = 50, py = 50, zoom = 1.0;
         let scores = {};
 
-        // HUD Dragging
-        const ui = document.getElementById('ui-layer');
-        let uiDrag = false, ux, uy;
-        ui.onmousedown = (e) => {
-            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
-            uiDrag = true; ux = e.clientX - ui.offsetLeft; uy = e.clientY - ui.offsetTop;
-        };
+        // Login Logic
+        function login() {
+            const nameInput = document.getElementById('username').value;
+            if (nameInput.trim()) {
+                myName = nameInput;
+                socket.emit('login', myName);
+            }
+        }
 
-        // Input Tracking
-        const board = document.getElementById('board');
-        window.onmousemove = (e) => {
-            if (uiDrag) {
-                ui.style.left = Math.max(0, Math.min(e.clientX - ux, window.innerWidth - ui.offsetWidth)) + 'px';
-                ui.style.top = Math.max(0, Math.min(e.clientY - uy, window.innerHeight - ui.offsetHeight)) + 'px';
-                return;
-            }
-            if (myRoom) {
-                const rect = board.getBoundingClientRect();
-                socket.emit('cursorMove', { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom });
-            }
-            if (panDrag) {
-                px += e.clientX - lx; py += e.clientY - ly;
-                lx = e.clientX; ly = e.clientY; updateView();
-            }
-        };
-
-        // Remote Cursors
-        socket.on('cursorUpdate', (d) => {
-            let c = document.getElementById(`c-${d.id}`);
-            if (!c) {
-                c = document.createElement('div'); c.id = `c-${d.id}`;
-                c.className = 'remote-cursor';
-                c.innerHTML = `<div class="cursor-label" style="color:${d.color}">${d.name}</div>`;
-                board.appendChild(c);
-            }
-            c.style.background = d.color; c.style.left = d.x + 'px'; c.style.top = d.y + 'px';
-            c.style.boxShadow = `0 0 8px ${d.color}`;
+        socket.on('loginAuthorized', (data) => {
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+            initGrid();
+            updateView();
         });
-        socket.on('cursorRemove', (id) => { const c = document.getElementById(`c-${id}`); if(c) c.remove(); });
 
-        // Core Functions
-        function login() { myName = document.getElementById('username').value; if(myName) socket.emit('login', myName); }
-        socket.on('loginAuthorized', () => { document.getElementById('auth-screen').style.display='none'; document.getElementById('game-screen').style.display='block'; initGrid(); updateView(); });
-
+        // Grid & Game Logic
         function initGrid() {
+            const board = document.getElementById('board');
             const frag = document.createDocumentFragment();
             for (let r = 0; r <= 50; r++) {
                 for (let c = 0; c <= 50; c++) {
                     const d = document.createElement('div');
                     if (r % 2 === 0 && c % 2 === 0) d.className = 'dot';
-                    else if (r % 2 === 0 && c % 2 !== 0) { d.className='line h'; d.id=`l-${r}-${c}`; d.onclick=()=>makeMove(r,c); }
-                    else if (r % 2 !== 0 && c % 2 === 0) { d.className='line v'; d.id=`l-${r}-${c}`; d.onclick=()=>makeMove(r,c); }
+                    else if (r % 2 === 0 && c % 2 !== 0) { 
+                        d.className='line h'; d.id=`l-${r}-${c}`; 
+                        d.onclick=()=>makeMove(r,c); 
+                    }
+                    else if (r % 2 !== 0 && c % 2 === 0) { 
+                        d.className='line v'; d.id=`l-${r}-${c}`; 
+                        d.onclick=()=>makeMove(r,c); 
+                    }
                     else { d.className='box'; d.id=`b-${r}-${c}`; }
                     frag.appendChild(d);
                 }
@@ -167,9 +138,7 @@
 
         socket.on('updateTurn', (data) => {
             isMyTurn = (data.currentPlayer === myName);
-            const t = document.getElementById('turn-display');
-            t.innerText = isMyTurn ? "Your Turn" : data.currentPlayer;
-            t.style.color = isMyTurn ? var('--accent') : "#fff";
+            document.getElementById('turn-display').innerText = isMyTurn ? "Your Turn" : data.currentPlayer;
             let html = "";
             data.players.forEach(p => html += `<div style="color:${p.color}">${p.name}: ${scores[p.name] || 0}</div>`);
             document.getElementById('scoreboard').innerHTML = html;
@@ -177,6 +146,7 @@
 
         socket.on('moveMade', (d) => {
             const l = document.getElementById(`l-${d.r}-${d.c}`);
+            if(!l) return;
             l.style.background = d.color; l.classList.add('taken');
             const hit = checkBoxes(d.r, d.c, d.color, d.userName);
             if (d.userName === myName) socket.emit(hit > 0 ? 'boxClosed' : 'nextTurn');
@@ -189,7 +159,10 @@
                 const box = document.getElementById(`b-${br}-${bc}`);
                 if (!box || box.style.background) return;
                 const sides = [`l-${br-1}-${bc}`, `l-${br+1}-${bc}`, `l-${br}-${bc-1}`, `l-${br}-${bc+1}`];
-                if (sides.every(id => document.getElementById(id).classList.contains('taken'))) {
+                if (sides.every(id => {
+                    const side = document.getElementById(id);
+                    return side && side.classList.contains('taken');
+                })) {
                     box.style.background = color; box.style.opacity = "0.4";
                     scores[user] = (scores[user] || 0) + 1; boxesLeft--; count++;
                 }
@@ -200,25 +173,58 @@
 
         function showEnd() {
             document.getElementById('end-screen').style.display='flex';
-            let res = ""; Object.entries(scores).forEach(([n, s]) => res += `<p>${n}: ${s} Boxes</p>`);
+            let res = ""; Object.entries(scores).forEach(([n, s]) => res += `<p>${n}: ${s}</p>`);
             document.getElementById('final-stats').innerHTML = res;
         }
 
-        // View Control
+        // HUD & View
+        const ui = document.getElementById('ui-layer');
+        let uiDrag = false, ux, uy;
+        ui.onmousedown = (e) => { if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') { uiDrag = true; ux = e.clientX - ui.offsetLeft; uy = e.clientY - ui.offsetTop; } };
+        
+        window.onmousemove = (e) => {
+            if (uiDrag) {
+                ui.style.left = Math.max(0, Math.min(e.clientX - ux, window.innerWidth - ui.offsetWidth)) + 'px';
+                ui.style.top = Math.max(0, Math.min(e.clientY - uy, window.innerHeight - ui.offsetHeight)) + 'px';
+            }
+            if (myRoom) {
+                const rect = board.getBoundingClientRect();
+                socket.emit('cursorMove', { x: (e.clientX - rect.left) / zoom, y: (e.clientY - rect.top) / zoom });
+            }
+            if (panDrag) {
+                px += e.clientX - lx; py += e.clientY - ly;
+                lx = e.clientX; ly = e.clientY; updateView();
+            }
+        };
+
+        window.onmouseup = () => { uiDrag = false; panDrag = false; };
+
+        socket.on('cursorUpdate', (d) => {
+            let c = document.getElementById(`c-${d.id}`);
+            if (!c) {
+                c = document.createElement('div'); c.id = `c-${d.id}`;
+                c.className = 'remote-cursor';
+                c.innerHTML = `<div class="cursor-label" style="color:${d.color}">${d.name}</div>`;
+                document.getElementById('board').appendChild(c);
+            }
+            c.style.background = d.color; c.style.left = d.x + 'px'; c.style.top = d.y + 'px';
+        });
+
+        socket.on('cursorRemove', (id) => { const c = document.getElementById(`c-${id}`); if(c) c.remove(); });
+
         function setZoom(v) { zoom = parseFloat(v); updateView(); }
-        function updateView() { board.style.transform = `translate(${px}px, ${py}px) scale(${zoom})`; }
+        function updateView() { document.getElementById('board').style.transform = `translate(${px}px, ${py}px) scale(${zoom})`; }
         window.onwheel = (e) => { zoom = Math.min(Math.max(zoom + (e.deltaY < 0 ? 0.05 : -0.05), 0.1), 2.0); document.getElementById('zoom-range').value = zoom; updateView(); };
 
         let panDrag = false, lx, ly;
-        window.onmousedown = (e) => { if(e.target.closest('#ui-layer')) return; panDrag=true; lx=e.clientX; ly=e.clientY; };
-        window.onmouseup = () => { panDrag = false; uiDrag = false; };
+        window.onmousedown = (e) => { if(!e.target.closest('#ui-layer')) { panDrag=true; lx=e.clientX; ly=e.clientY; } };
 
         function createRoom() { const c = Math.random().toString(36).substring(2, 8).toUpperCase(); document.getElementById('room-input').value = c; joinRoom(); }
         function joinRoom() { 
             myRoom = document.getElementById('room-input').value.toUpperCase(); 
             if(myRoom.length === 6) {
                 socket.emit('joinRoom', myRoom); 
-                document.getElementById('party-ui').style.display = 'none';
+                document.getElementById('room-controls').style.display = 'none';
                 document.getElementById('active-info').style.display = 'block';
                 document.getElementById('room-id').innerText = myRoom;
             }
