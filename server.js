@@ -45,7 +45,7 @@ io.on('connection', (socket) => {
         io.to(socket.room).emit('moveMade', { ...data, color: socket.color, userName: socket.username });
     });
 
-    socket.on('boxClosed', () => updateRoomStatus(socket.room)); // Same player goes again
+    socket.on('boxClosed', () => updateRoomStatus(socket.room)); 
     socket.on('nextTurn', () => {
         if (rooms[socket.room]) {
             rooms[socket.room].turnIndex = (rooms[socket.room].turnIndex + 1) % rooms[socket.room].players.length;
@@ -75,4 +75,4 @@ io.on('connection', (socket) => {
     });
 });
 
-server.listen(process.env.PORT || 3000);
+server.listen(process.env.PORT || 3000);    
