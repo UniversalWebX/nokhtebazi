@@ -18,10 +18,10 @@ app.use(express.static('public'));
 
 io.on('connection', (socket) => {
     socket.on('login', (username) => {
-        if (isLockedDown && username !== 'OWNER') return socket.emit('errorMsg', 'SERVER LOCKED');
+        if (isLockedDown && username !== 'OWNER') return socket.emit('errorMsg', 'Server is currently locked.');
         let users = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         if (!users[username]) {
-            users[username] = { score: 0, color: `hsl(${Math.random() * 360}, 80%, 60%)` };
+            users[username] = { score: 0, color: `hsl(${Math.random() * 360}, 70%, 55%)` };
             fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2));
         }
         socket.username = username;
@@ -39,6 +39,14 @@ io.on('connection', (socket) => {
         updateRoomStatus(code);
     });
 
+    socket.on('cursorMove', (data) => {
+        if (socket.room) {
+            socket.to(socket.room).emit('cursorUpdate', {
+                id: socket.id, name: socket.username, color: socket.color, x: data.x, y: data.y
+            });
+        }
+    });
+
     socket.on('makeMove', (data) => {
         const room = rooms[socket.room];
         if (!room || room.players[room.turnIndex].id !== socket.id) return;
@@ -53,12 +61,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('ownerAction', (data) => {
-        if (socket.username !== 'OWNER') return;
-        if (data.action === 'lockdown') { isLockedDown = true; io.emit('kick', 'LOCKDOWN'); }
-        else if (data.action === 'unlock') isLockedDown = false;
-    });
-
     function updateRoomStatus(code) {
         if (!rooms[code]) return;
         io.to(code).emit('updateTurn', {
@@ -69,8 +71,10 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         if (socket.room && rooms[socket.room]) {
+            io.to(socket.room).emit('cursorRemove', socket.id);
             rooms[socket.room].players = rooms[socket.room].players.filter(p => p.id !== socket.id);
             if (rooms[socket.room].players.length === 0) delete rooms[socket.room];
+            else updateRoomStatus(socket.room);
         }
     });
 });
