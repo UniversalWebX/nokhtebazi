@@ -8,13 +8,13 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-const PORT = process.env.PORT || 3000;
-const DATA_FILE = './users.json';
+const DATA_FILE = path.join(__dirname, 'users.json');
 
-// Initialize JSON file if it doesn't exist
-if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, JSON.stringify({ OWNER: { score: 0, wins: 0 } }));
-}
+// Helper to manage JSON DB
+const readDB = () => JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+const writeDB = (data) => fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+
+if (!fs.existsSync(DATA_FILE)) writeDB({ OWNER: { score: 0, color: '#000000' } });
 
 let isLockedDown = false;
 
@@ -22,55 +22,48 @@ app.use(express.static('public'));
 
 io.on('connection', (socket) => {
     socket.on('login', (username) => {
-        if (isLockedDown && username !== 'OWNER') {
-            return socket.emit('errorMsg', 'Server is locked by OWNER.');
-        }
+        if (isLockedDown && username !== 'OWNER') return socket.emit('errorMsg', 'Site Locked.');
 
-        let users = JSON.parse(fs.readFileSync(DATA_FILE));
+        let users = readDB();
         if (!users[username]) {
-            users[username] = { score: 0, wins: 0 };
-            fs.writeFileSync(DATA_FILE, JSON.stringify(users));
+            // Assign random bright color
+            const randomColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
+            users[username] = { score: 0, color: randomColor };
+            writeDB(users);
         }
 
         socket.username = username;
+        socket.color = users[username].color;
         socket.emit('loginAuthorized', { 
             username, 
-            isOwner: username === 'OWNER',
-            allUsers: users 
+            color: socket.color,
+            isOwner: username === 'OWNER' 
         });
     });
 
-    socket.on('joinRoom', (code) => {
-        socket.join(code);
-        socket.to(code).emit('chat', `${socket.username} joined the party.`);
+    socket.on('joinRoom', (code) => socket.join(code));
+
+    socket.on('makeMove', (data) => {
+        // data: { room, r, c, type }
+        io.to(data.room).emit('moveMade', { ...data, color: socket.color, user: socket.username });
     });
 
-    // --- OWNER ONLY COMMANDS ---
     socket.on('ownerAction', (data) => {
         if (socket.username !== 'OWNER') return;
-
         if (data.action === 'lockdown') {
             isLockedDown = true;
-            io.emit('kick', 'The OWNER has locked the website.');
-        } 
-        if (data.action === 'unlock') {
+            io.emit('kick', 'The OWNER locked the site.');
+        } else if (data.action === 'unlock') {
             isLockedDown = false;
-        }
-        if (data.action === 'setScore') {
-            let users = JSON.parse(fs.readFileSync(DATA_FILE));
+        } else if (data.action === 'setScore') {
+            let users = readDB();
             if (users[data.target]) {
                 users[data.target].score = parseInt(data.value);
-                fs.writeFileSync(DATA_FILE, JSON.stringify(users));
-                io.emit('updateLeaderboard', users);
+                writeDB(users);
+                io.emit('updateUI'); 
             }
         }
     });
-
-    // Game Logic: Line Clicked
-    socket.on('makeMove', (moveData) => {
-        // moveData = { room, lineId, player }
-        io.to(moveData.room).emit('moveMade', moveData);
-    });
 });
 
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(process.env.PORT || 3000);
