@@ -1,51 +1,88 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Dots & Boxes 50x50 Multiplayer</title>
+    <title>Neon Dots 50x50</title>
     <style>
-        body { font-family: sans-serif; background: #111; color: #fff; margin: 0; overflow: hidden; }
-        #auth-screen, #end-screen { position: fixed; inset: 0; background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
-        #game-screen { display: none; width: 100vw; height: 100vh; position: relative; }
-        #ui-layer { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; z-index: 100; pointer-events: auto; border: 1px solid #444; }
-        #board { position: absolute; display: grid; grid-template-columns: repeat(50, 10px 40px) 10px; grid-template-rows: repeat(50, 10px 40px) 10px; transform-origin: 0 0; }
-        .dot { width: 10px; height: 10px; background: #555; border-radius: 50%; }
-        .line { background: #222; cursor: pointer; }
-        .line.h { width: 40px; height: 10px; }
-        .line.v { width: 10px; height: 40px; }
-        .line.taken { cursor: default; }
-        .box { width: 40px; height: 40px; }
-        .turn-highlight { border: 2px solid yellow; padding: 5px; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.5; } }
-        #owner-panel { display: none; margin-top: 10px; border-top: 1px solid red; }
+        :root { --glow: #00f2ff; --bg: #050505; --panel: #11111b; }
+        body { font-family: 'Orbitron', sans-serif; background: var(--bg); color: #fff; margin: 0; overflow: hidden; }
+        
+        #auth-screen, #end-screen { 
+            position: fixed; inset: 0; background: radial-gradient(circle, #111 0%, #000 100%);
+            display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000;
+        }
+
+        /* Glassmorphism UI */
+        #ui-layer { 
+            position: fixed; top: 20px; left: 20px; background: rgba(20, 20, 30, 0.85); 
+            padding: 20px; border-radius: 15px; z-index: 100; border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(10px); box-shadow: 0 8px 32px 0 rgba(0,0,0,0.8);
+        }
+
+        #board { 
+            position: absolute; display: grid; transform-origin: 0 0;
+            grid-template-columns: repeat(50, 8px 45px) 8px;
+            grid-template-rows: repeat(50, 8px 45px) 8px;
+            padding: 100px; /* Buffer for zooming */
+        }
+
+        .dot { width: 8px; height: 8px; background: #444; border-radius: 50%; box-shadow: 0 0 5px rgba(255,255,255,0.2); }
+        .line { background: #1a1a1a; cursor: pointer; transition: all 0.3s ease; }
+        .line:hover:not(.taken) { background: #333; }
+        .line.h { width: 45px; height: 8px; border-radius: 4px; }
+        .line.v { width: 8px; height: 45px; border-radius: 4px; }
+        
+        /* The Glow Effect */
+        .line.taken { box-shadow: 0 0 15px currentColor; z-index: 2; }
+        .box { width: 45px; height: 45px; transition: background 0.5s ease; border-radius: 4px; }
+
+        button { 
+            background: linear-gradient(45deg, #007bff, #00f2ff); border: none; 
+            color: white; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold;
+        }
+        input { background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 5px; margin-bottom: 10px; }
+        .turn-card { border-left: 4px solid var(--glow); padding-left: 10px; margin-bottom: 15px; }
     </style>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
     <div id="auth-screen">
-        <h1>Dots & Boxes</h1>
-        <input type="text" id="username" placeholder="Username">
-        <button onclick="login()">Start Game</button>
+        <h1 style="letter-spacing: 5px; color: var(--glow);">NEON DOTS</h1>
+        <input type="text" id="username" placeholder="OPERATOR NAME">
+        <button onclick="login()">INITIALIZE</button>
     </div>
 
     <div id="end-screen" style="display:none">
-        <h1>Game Over!</h1>
+        <h1 id="winner-text">MATCH COMPLETE</h1>
         <div id="final-stats"></div>
-        <button onclick="location.reload()">Play Again</button>
+        <button onclick="location.reload()">RE-INITIALIZE</button>
     </div>
 
-    <div id="game-screen">
+    <div id="game-screen" style="display:none">
         <div id="ui-layer">
-            <div id="turn-display">Waiting for players...</div>
-            <div id="party-controls">
-                <button onclick="createParty()">Create Party</button>
-                <input type="text" id="party-code" placeholder="6-Char Code" style="width:100px">
-                <button onclick="join()">Join</button>
+            <div class="turn-card">
+                <small>CURRENT TURN</small>
+                <div id="turn-display" style="font-size: 1.2em; font-weight: bold;">---</div>
             </div>
-            <div id="active-party" style="display:none">Room: <b id="room-text"></b></div>
-            <div id="scoreboard"></div>
+
+            <div id="party-controls">
+                <button onclick="createParty()">NEW PARTY</button>
+                <input type="text" id="party-code" placeholder="CODE" style="width:80px; margin-top:10px;">
+                <button onclick="join()">JOIN</button>
+            </div>
+
+            <div id="active-party" style="display:none; color: var(--glow);">ROOM: <b id="room-text"></b></div>
             
-            <div id="owner-panel">
-                <button onclick="socket.emit('ownerAction', {action:'lockdown'})">LOCKDOWN</button>
+            <div style="margin-top:15px;">
+                <label style="font-size: 10px;">ZOOM SCANNER</label><br>
+                <input type="range" id="zoom-range" min="0.05" max="1.5" step="0.01" value="0.8" oninput="updateZoom(this.value)" style="width:100%">
+            </div>
+
+            <div id="scoreboard" style="font-size: 12px; margin-top:10px;"></div>
+            
+            <div id="owner-panel" style="display:none; margin-top:20px; border-top: 1px solid #ff0055; padding-top:10px;">
+                <small style="color:#ff0055">ADMIN ACCESS</small><br>
+                <button onclick="socket.emit('ownerAction', {action:'lockdown'})" style="background:#ff0055; font-size:10px;">LOCKDOWN</button>
             </div>
         </div>
         <div id="board"></div>
@@ -55,8 +92,8 @@
     <script>
         const socket = io();
         let myName, myRoom, isMyTurn = false, totalCaptured = 0;
+        let px = 100, py = 100, zoom = 0.8;
         let scores = {};
-        const TOTAL_BOXES = 2500; // 50x50
 
         function login() {
             myName = document.getElementById('username').value;
@@ -68,10 +105,12 @@
             document.getElementById('game-screen').style.display = 'block';
             if(data.isOwner) document.getElementById('owner-panel').style.display = 'block';
             initBoard();
+            updatePos();
         });
 
         function initBoard() {
             const board = document.getElementById('board');
+            const frag = document.createDocumentFragment();
             for (let r = 0; r <= 100; r++) {
                 for (let c = 0; c <= 100; c++) {
                     const div = document.createElement('div');
@@ -85,40 +124,40 @@
                     } else {
                         div.className = 'box'; div.id = `box-${r}-${c}`;
                     }
-                    board.appendChild(div);
+                    frag.appendChild(div);
                 }
             }
+            board.appendChild(frag);
         }
 
         function tryMove(r, c) {
-            if (!isMyTurn) return alert("Not your turn!");
+            if (!isMyTurn) return;
             const el = document.getElementById(`line-${r}-${c}`);
             if (el.classList.contains('taken')) return;
-            socket.emit('makeMove', { room: myRoom, r, c });
+            socket.emit('makeMove', { r, c });
         }
 
         socket.on('updateTurn', (data) => {
             isMyTurn = (data.currentPlayer === myName);
-            document.getElementById('turn-display').innerHTML = isMyTurn ? 
-                "<b class='turn-highlight'>YOUR TURN!</b>" : `Turn: ${data.currentPlayer}`;
+            document.getElementById('turn-display').innerText = data.currentPlayer.toUpperCase();
+            document.getElementById('turn-display').style.color = isMyTurn ? 'var(--glow)' : '#888';
             
-            // Update Scoreboard UI
-            let html = "";
+            let scoreHtml = "";
             data.players.forEach(p => {
-                html += `<div style="color:${p.color}">${p.name}: ${scores[p.name] || 0}</div>`;
+                scoreHtml += `<div style="color:${p.color}">${p.name}: ${scores[p.name] || 0}</div>`;
             });
-            document.getElementById('scoreboard').innerHTML = html;
+            document.getElementById('scoreboard').innerHTML = scoreHtml;
         });
 
         socket.on('moveMade', (data) => {
             const line = document.getElementById(`line-${data.r}-${data.c}`);
+            line.style.color = data.color;
             line.style.background = data.color;
             line.classList.add('taken');
 
-            const boxesClosed = checkBoxes(data.r, data.c, data.color, data.userName);
-            
+            const closed = checkBoxes(data.r, data.c, data.color, data.userName);
             if (data.userName === myName) {
-                if (boxesClosed > 0) socket.emit('boxClosed');
+                if (closed > 0) socket.emit('boxClosed');
                 else socket.emit('nextTurn');
             }
         });
@@ -126,46 +165,54 @@
         function checkBoxes(r, c, color, user) {
             let found = 0;
             const potential = (r % 2 === 0) ? [[r-1, c], [r+1, c]] : [[r, c-1], [r, c+1]];
-            
             potential.forEach(([br, bc]) => {
                 const box = document.getElementById(`box-${br}-${bc}`);
                 if (!box || box.style.background) return;
                 const sides = [`line-${br-1}-${bc}`, `line-${br+1}-${bc}`, `line-${br}-${bc-1}`, `line-${br}-${bc+1}`];
-                if (sides.every(s => document.getElementById(s).classList.contains('taken'))) {
+                if (sides.every(id => document.getElementById(id).classList.contains('taken'))) {
                     box.style.background = color;
-                    box.style.opacity = "0.6";
+                    box.style.boxShadow = `inset 0 0 20px ${color}`;
+                    box.style.opacity = "0.3";
                     scores[user] = (scores[user] || 0) + 1;
                     totalCaptured++;
                     found++;
                 }
             });
-
-            if (totalCaptured === TOTAL_BOXES) endGame();
+            if (totalCaptured === 2500) endGame();
             return found;
         }
 
-        function endGame() {
-            document.getElementById('end-screen').style.display = 'flex';
-            let stats = "";
-            Object.entries(scores).forEach(([name, score]) => {
-                stats += `<p>${name}: ${score} boxes</p>`;
-            });
-            document.getElementById('final-stats').innerHTML = stats;
-        }
+        // Navigation
+        function updateZoom(v) { zoom = parseFloat(v); updatePos(); }
+        function updatePos() { document.getElementById('board').style.transform = `translate(${px}px, ${py}px) scale(${zoom})`; }
 
-        // Navigation and Party Logic (Same as previous)
+        window.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            zoom = Math.min(Math.max(zoom + (e.deltaY < 0 ? 0.05 : -0.05), 0.05), 1.5);
+            document.getElementById('zoom-range').value = zoom;
+            updatePos();
+        }, { passive: false });
+
+        let dragging = false, lx, ly;
+        window.onmousedown = (e) => { if(e.target.tagName==='CANVAS'||e.target.id==='game-screen') { dragging=true; lx=e.clientX; ly=e.clientY; }};
+        window.onmouseup = () => dragging = false;
+        window.onmousemove = (e) => {
+            if(!dragging) return;
+            px += e.clientX - lx; py += e.clientY - ly;
+            lx = e.clientX; ly = e.clientY; updatePos();
+        };
+
         function createParty() { const c = Math.random().toString(36).substring(2, 8).toUpperCase(); document.getElementById('party-code').value = c; join(); }
         function join() { 
             myRoom = document.getElementById('party-code').value.toUpperCase(); 
-            socket.emit('joinRoom', myRoom); 
-            document.getElementById('party-controls').style.display = 'none';
-            document.getElementById('active-party').style.display = 'block';
-            document.getElementById('room-text').innerText = myRoom;
+            if(myRoom.length === 6) {
+                socket.emit('joinRoom', myRoom); 
+                document.getElementById('party-controls').style.display = 'none';
+                document.getElementById('active-party').style.display = 'block';
+                document.getElementById('room-text').innerText = myRoom;
+            }
         }
-
-        let px=0, py=0;
-        window.onkeydown=(e)=>{if(e.key=='ArrowUp')py+=40;if(e.key=='ArrowDown')py-=40;if(e.key=='ArrowLeft')px+=40;if(e.key=='ArrowRight')px-=40;document.getElementById('board').style.transform=`translate(${px}px,${py}px)`};
-        socket.on('kick', (m)=>{alert(m);location.reload();});
+        socket.on('kick', (m) => { alert(m); location.reload(); });
     </script>
 </body>
 </html>
