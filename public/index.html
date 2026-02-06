@@ -3,19 +3,37 @@
 <head>
     <title>Nokhtebazi</title>
     <style>
-        :root { --accent: #00f2ff; --bg: #0a0a0a; }
-        body { font-family: 'Orbitron', sans-serif; background: var(--bg); color: #fff; margin: 0; overflow: hidden; }
+        :root { 
+            --accent: #00f2ff; 
+            --bg: #050505; 
+            --glow: rgba(0, 242, 255, 0.4);
+        }
         
+        body { 
+            font-family: 'Orbitron', sans-serif; 
+            background: var(--bg); 
+            color: #fff; 
+            margin: 0; 
+            overflow: hidden; 
+            animation: fadeIn 1.2s ease;
+        }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes popIn { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 0.4; } }
+        @keyframes slideRight { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
         #auth-screen, #end-screen { 
             position: fixed; inset: 0; background: #000;
             display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000;
         }
 
         #ui-layer { 
-            position: fixed; top: 20px; left: 20px; background: rgba(30, 30, 35, 0.95); 
-            padding: 20px; border-radius: 12px; z-index: 500; border: 1px solid rgba(255,255,255,0.1);
-            backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: fixed; top: 20px; left: 20px; background: rgba(15, 15, 20, 0.9); 
+            padding: 22px; border-radius: 12px; z-index: 500; 
+            border: 1px solid rgba(0, 242, 255, 0.2);
+            backdrop-filter: blur(15px); box-shadow: 0 10px 40px rgba(0,0,0,0.8);
             cursor: move; width: 220px;
+            animation: slideRight 0.5s ease-out;
         }
 
         #board-container { width: 100vw; height: 100vh; overflow: hidden; position: relative; }
@@ -24,37 +42,53 @@
             position: absolute; display: grid; transform-origin: 0 0;
             grid-template-columns: repeat(25, 8px 50px) 8px;
             grid-template-rows: repeat(25, 8px 50px) 8px;
-            padding: 200px;
+            padding: 300px;
         }
 
-        .dot { width: 8px; height: 8px; background: #555; border-radius: 50%; }
-        .line { background: #1a1a1a; cursor: pointer; }
-        .line:hover:not(.taken) { background: #333; }
-        .line.h { width: 50px; height: 8px; border-radius: 4px; }
-        .line.v { width: 8px; height: 50px; border-radius: 4px; }
-        .line.taken { box-shadow: 0 0 10px currentColor; z-index: 2; }
-        .box { width: 50px; height: 50px; transition: background 0.4s; border-radius: 4px; }
+        .dot { width: 8px; height: 8px; background: #333; border-radius: 50%; transition: 0.3s; }
+        .line { background: #1a1a1a; cursor: pointer; transition: all 0.2s; border-radius: 4px; }
+        .line:hover:not(.taken) { background: #444; box-shadow: 0 0 10px #fff; }
+        .line.h { width: 50px; height: 8px; }
+        .line.v { width: 8px; height: 50px; }
+        
+        .line.taken { 
+            box-shadow: 0 0 15px currentColor; 
+            z-index: 2; 
+            filter: brightness(1.2);
+        }
 
-        .remote-cursor { position: absolute; width: 12px; height: 12px; border-radius: 50%; pointer-events: none; z-index: 1000; }
-        .cursor-label { position: absolute; top: -22px; left: 10px; font-size: 10px; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+        .box { width: 50px; height: 50px; border-radius: 4px; pointer-events: none; }
+        .box.captured { animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
 
-        button { background: var(--accent); border: none; color: #000; padding: 12px; border-radius: 6px; cursor: pointer; font-family: 'Orbitron'; font-weight: bold; width: 100%; margin-top: 8px; }
-        input { background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; margin-bottom: 8px; width: calc(100% - 22px); font-family: 'Orbitron'; }
-        .status-box { border-left: 4px solid var(--accent); padding-left: 10px; margin-bottom: 20px; }
-        #scoreboard { font-size: 12px; margin-top: 15px; border-top: 1px solid #333; padding-top: 10px; }
+        .remote-cursor { position: absolute; width: 10px; height: 10px; border-radius: 50%; pointer-events: none; z-index: 999; transition: 0.1s linear; }
+        .cursor-label { position: absolute; top: -20px; left: 10px; font-size: 9px; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.7); }
+
+        /* Buttons with Immersive Lighting */
+        button { 
+            background: transparent; border: 1px solid var(--accent); color: var(--accent); 
+            padding: 12px; border-radius: 6px; cursor: pointer; font-family: 'Orbitron'; 
+            font-weight: bold; width: 100%; margin-top: 10px; transition: 0.3s;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        button:hover { background: var(--accent); color: #000; box-shadow: 0 0 20px var(--accent); }
+
+        input { background: #111; border: 1px solid #333; color: white; padding: 10px; border-radius: 6px; margin-bottom: 8px; width: calc(100% - 22px); font-family: 'Orbitron'; }
+        
+        .status-box { border-left: 3px solid var(--accent); padding-left: 12px; margin-bottom: 20px; }
+        #scoreboard { font-size: 11px; margin-top: 15px; max-height: 120px; overflow-y: auto; border-top: 1px solid #222; padding-top: 10px; }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
     <div id="auth-screen">
-        <h1 style="color: var(--accent);">Nokhtebazi</h1>
-        <input type="text" id="username" placeholder="Enter Name">
+        <h1 style="color: var(--accent); letter-spacing: 10px;">NOKHTEBAZI</h1>
+        <input type="text" id="username" placeholder="NAME">
         <button id="play-btn" onclick="login()">Play Game</button>
     </div>
 
     <div id="end-screen" style="display:none">
-        <h1>Game Over</h1>
+        <h1 style="color: var(--accent);">GAME OVER</h1>
         <div id="final-stats"></div>
         <button onclick="location.reload()">Play Again</button>
     </div>
@@ -62,20 +96,20 @@
     <div id="game-screen" style="display:none">
         <div id="ui-layer">
             <div class="status-box">
-                <small>Turn</small>
-                <div id="turn-display">---</div>
+                <small style="font-size: 9px; opacity: 0.6;">CURRENT TURN</small>
+                <div id="turn-display" style="font-size: 16px; margin-top: 4px;">---</div>
             </div>
             <div id="room-controls">
                 <button onclick="createRoom()">Create Room</button>
-                <input type="text" id="room-input" placeholder="Room Code" maxlength="6" style="margin-top: 10px;">
+                <input type="text" id="room-input" placeholder="CODE" maxlength="6" style="margin-top: 10px; text-align: center;">
                 <button onclick="joinRoom()">Join Room</button>
             </div>
             <div id="active-info" style="display:none; text-align: center;">
                 Room: <b id="room-id" style="color: var(--accent);"></b>
             </div>
             <div style="margin-top:20px;">
-                <label style="font-size: 9px; opacity: 0.6;">ZOOM LEVEL</label>
-                <input type="range" id="zoom-range" min="0.1" max="2.0" step="0.01" value="1.0" oninput="setZoom(this.value)">
+                <label style="font-size: 9px; opacity: 0.5;">ZOOM SCAN</label>
+                <input type="range" id="zoom-range" min="0.2" max="2.0" step="0.01" value="1.0" oninput="setZoom(this.value)" style="width: 100%; accent-color: var(--accent);">
             </div>
             <div id="scoreboard"></div>
         </div>
@@ -91,23 +125,17 @@
         let px = 50, py = 50, zoom = 1.0;
         let scores = {};
 
-        // Login Logic
         function login() {
-            const nameInput = document.getElementById('username').value;
-            if (nameInput.trim()) {
-                myName = nameInput;
-                socket.emit('login', myName);
-            }
+            const input = document.getElementById('username').value;
+            if (input.trim()) { myName = input; socket.emit('login', myName); }
         }
 
-        socket.on('loginAuthorized', (data) => {
+        socket.on('loginAuthorized', () => {
             document.getElementById('auth-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'block';
-            initGrid();
-            updateView();
+            initGrid(); updateView();
         });
 
-        // Grid & Game Logic
         function initGrid() {
             const board = document.getElementById('board');
             const frag = document.createDocumentFragment();
@@ -115,14 +143,8 @@
                 for (let c = 0; c <= 50; c++) {
                     const d = document.createElement('div');
                     if (r % 2 === 0 && c % 2 === 0) d.className = 'dot';
-                    else if (r % 2 === 0 && c % 2 !== 0) { 
-                        d.className='line h'; d.id=`l-${r}-${c}`; 
-                        d.onclick=()=>makeMove(r,c); 
-                    }
-                    else if (r % 2 !== 0 && c % 2 === 0) { 
-                        d.className='line v'; d.id=`l-${r}-${c}`; 
-                        d.onclick=()=>makeMove(r,c); 
-                    }
+                    else if (r % 2 === 0 && c % 2 !== 0) { d.className='line h'; d.id=`l-${r}-${c}`; d.onclick=()=>makeMove(r,c); }
+                    else if (r % 2 !== 0 && c % 2 === 0) { d.className='line v'; d.id=`l-${r}-${c}`; d.onclick=()=>makeMove(r,c); }
                     else { d.className='box'; d.id=`b-${r}-${c}`; }
                     frag.appendChild(d);
                 }
@@ -138,16 +160,18 @@
 
         socket.on('updateTurn', (data) => {
             isMyTurn = (data.currentPlayer === myName);
-            document.getElementById('turn-display').innerText = isMyTurn ? "Your Turn" : data.currentPlayer;
+            const display = document.getElementById('turn-display');
+            display.innerText = isMyTurn ? "YOUR TURN" : data.currentPlayer.toUpperCase();
+            display.style.color = isMyTurn ? 'var(--accent)' : '#fff';
             let html = "";
-            data.players.forEach(p => html += `<div style="color:${p.color}">${p.name}: ${scores[p.name] || 0}</div>`);
+            data.players.forEach(p => html += `<div style="color:${p.color}; margin-bottom:4px;">${p.name}: ${scores[p.name] || 0}</div>`);
             document.getElementById('scoreboard').innerHTML = html;
         });
 
         socket.on('moveMade', (d) => {
             const l = document.getElementById(`l-${d.r}-${d.c}`);
             if(!l) return;
-            l.style.background = d.color; l.classList.add('taken');
+            l.style.color = d.color; l.style.background = d.color; l.classList.add('taken');
             const hit = checkBoxes(d.r, d.c, d.color, d.userName);
             if (d.userName === myName) socket.emit(hit > 0 ? 'boxClosed' : 'nextTurn');
         });
@@ -157,13 +181,10 @@
             const pts = (r % 2 === 0) ? [[r-1, c], [r+1, c]] : [[r, c-1], [r, c+1]];
             pts.forEach(([br, bc]) => {
                 const box = document.getElementById(`b-${br}-${bc}`);
-                if (!box || box.style.background) return;
+                if (!box || box.classList.contains('captured')) return;
                 const sides = [`l-${br-1}-${bc}`, `l-${br+1}-${bc}`, `l-${br}-${bc-1}`, `l-${br}-${bc+1}`];
-                if (sides.every(id => {
-                    const side = document.getElementById(id);
-                    return side && side.classList.contains('taken');
-                })) {
-                    box.style.background = color; box.style.opacity = "0.4";
+                if (sides.every(id => document.getElementById(id)?.classList.contains('taken'))) {
+                    box.style.background = color; box.classList.add('captured');
                     scores[user] = (scores[user] || 0) + 1; boxesLeft--; count++;
                 }
             });
@@ -177,15 +198,14 @@
             document.getElementById('final-stats').innerHTML = res;
         }
 
-        // HUD & View
+        // HUD Dragging
         const ui = document.getElementById('ui-layer');
         let uiDrag = false, ux, uy;
         ui.onmousedown = (e) => { if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') { uiDrag = true; ux = e.clientX - ui.offsetLeft; uy = e.clientY - ui.offsetTop; } };
         
         window.onmousemove = (e) => {
             if (uiDrag) {
-                ui.style.left = Math.max(0, Math.min(e.clientX - ux, window.innerWidth - ui.offsetWidth)) + 'px';
-                ui.style.top = Math.max(0, Math.min(e.clientY - uy, window.innerHeight - ui.offsetHeight)) + 'px';
+                ui.style.left = (e.clientX - ux) + 'px'; ui.style.top = (e.clientY - uy) + 'px';
             }
             if (myRoom) {
                 const rect = board.getBoundingClientRect();
@@ -208,27 +228,11 @@
                 document.getElementById('board').appendChild(c);
             }
             c.style.background = d.color; c.style.left = d.x + 'px'; c.style.top = d.y + 'px';
+            c.style.boxShadow = `0 0 10px ${d.color}`;
         });
 
         socket.on('cursorRemove', (id) => { const c = document.getElementById(`c-${id}`); if(c) c.remove(); });
 
         function setZoom(v) { zoom = parseFloat(v); updateView(); }
         function updateView() { document.getElementById('board').style.transform = `translate(${px}px, ${py}px) scale(${zoom})`; }
-        window.onwheel = (e) => { zoom = Math.min(Math.max(zoom + (e.deltaY < 0 ? 0.05 : -0.05), 0.1), 2.0); document.getElementById('zoom-range').value = zoom; updateView(); };
-
-        let panDrag = false, lx, ly;
-        window.onmousedown = (e) => { if(!e.target.closest('#ui-layer')) { panDrag=true; lx=e.clientX; ly=e.clientY; } };
-
-        function createRoom() { const c = Math.random().toString(36).substring(2, 8).toUpperCase(); document.getElementById('room-input').value = c; joinRoom(); }
-        function joinRoom() { 
-            myRoom = document.getElementById('room-input').value.toUpperCase(); 
-            if(myRoom.length === 6) {
-                socket.emit('joinRoom', myRoom); 
-                document.getElementById('room-controls').style.display = 'none';
-                document.getElementById('active-info').style.display = 'block';
-                document.getElementById('room-id').innerText = myRoom;
-            }
-        }
-    </script>
-</body>
-</html>
+        window.onwheel = (e) => { zoom = Math.min(Math.max(zoom + (e.deltaY < 0 ? 0.05 :
