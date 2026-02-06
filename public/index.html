@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Neon Dots 50x50</title>
+    <title>Nokhtebazi by UWX Studios</title>
     <style>
         :root { --glow: #00f2ff; --bg: #050505; --panel: #11111b; }
         body { font-family: 'Orbitron', sans-serif; background: var(--bg); color: #fff; margin: 0; overflow: hidden; }
@@ -11,29 +11,30 @@
             display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000;
         }
 
-        /* Glassmorphism UI */
         #ui-layer { 
             position: fixed; top: 20px; left: 20px; background: rgba(20, 20, 30, 0.85); 
             padding: 20px; border-radius: 15px; z-index: 100; border: 1px solid rgba(255,255,255,0.1);
             backdrop-filter: blur(10px); box-shadow: 0 8px 32px 0 rgba(0,0,0,0.8);
         }
 
+        #board-container { width: 100vw; height: 100vh; overflow: hidden; position: relative; }
+
         #board { 
             position: absolute; display: grid; transform-origin: 0 0;
-            grid-template-columns: repeat(50, 8px 45px) 8px;
-            grid-template-rows: repeat(50, 8px 45px) 8px;
-            padding: 100px; /* Buffer for zooming */
+            /* 25 boxes = 26 dots. 8px dot, 50px line */
+            grid-template-columns: repeat(25, 8px 50px) 8px;
+            grid-template-rows: repeat(25, 8px 50px) 8px;
+            padding: 200px;
         }
 
-        .dot { width: 8px; height: 8px; background: #444; border-radius: 50%; box-shadow: 0 0 5px rgba(255,255,255,0.2); }
-        .line { background: #1a1a1a; cursor: pointer; transition: all 0.3s ease; }
-        .line:hover:not(.taken) { background: #333; }
-        .line.h { width: 45px; height: 8px; border-radius: 4px; }
-        .line.v { width: 8px; height: 45px; border-radius: 4px; }
+        .dot { width: 8px; height: 8px; background: #444; border-radius: 50%; }
+        .line { background: #1a1a1a; cursor: pointer; transition: all 0.2s ease; }
+        .line:hover:not(.taken) { background: #333; box-shadow: 0 0 10px rgba(255,255,255,0.1); }
+        .line.h { width: 50px; height: 8px; border-radius: 4px; }
+        .line.v { width: 8px; height: 50px; border-radius: 4px; }
         
-        /* The Glow Effect */
         .line.taken { box-shadow: 0 0 15px currentColor; z-index: 2; }
-        .box { width: 45px; height: 45px; transition: background 0.5s ease; border-radius: 4px; }
+        .box { width: 50px; height: 50px; transition: background 0.5s ease; border-radius: 4px; }
 
         button { 
             background: linear-gradient(45deg, #007bff, #00f2ff); border: none; 
@@ -47,15 +48,15 @@
 <body>
 
     <div id="auth-screen">
-        <h1 style="letter-spacing: 5px; color: var(--glow);">NEON DOTS</h1>
-        <input type="text" id="username" placeholder="OPERATOR NAME">
-        <button onclick="login()">INITIALIZE</button>
+        <h1 style="letter-spacing: 5px; color: var(--glow);">Nokhtebazi</h1>
+        <input type="text" id="username" placeholder="Enter Username">
+        <button onclick="login()">Play</button>
     </div>
 
     <div id="end-screen" style="display:none">
         <h1 id="winner-text">MATCH COMPLETE</h1>
         <div id="final-stats"></div>
-        <button onclick="location.reload()">RE-INITIALIZE</button>
+        <button onclick="location.reload()">Play Again</button>
     </div>
 
     <div id="game-screen" style="display:none">
@@ -71,29 +72,28 @@
                 <button onclick="join()">JOIN</button>
             </div>
 
-            <div id="active-party" style="display:none; color: var(--glow);">ROOM: <b id="room-text"></b></div>
+            <div id="active-party" style="display:none; color: var(--glow); margin-top:10px;">ROOM: <b id="room-text"></b></div>
             
             <div style="margin-top:15px;">
                 <label style="font-size: 10px;">ZOOM SCANNER</label><br>
-                <input type="range" id="zoom-range" min="0.05" max="1.5" step="0.01" value="0.8" oninput="updateZoom(this.value)" style="width:100%">
+                <input type="range" id="zoom-range" min="0.1" max="2.0" step="0.01" value="1.0" oninput="updateZoom(this.value)" style="width:100%">
             </div>
 
             <div id="scoreboard" style="font-size: 12px; margin-top:10px;"></div>
-            
-            <div id="owner-panel" style="display:none; margin-top:20px; border-top: 1px solid #ff0055; padding-top:10px;">
-                <small style="color:#ff0055">ADMIN ACCESS</small><br>
-                <button onclick="socket.emit('ownerAction', {action:'lockdown'})" style="background:#ff0055; font-size:10px;">LOCKDOWN</button>
-            </div>
         </div>
-        <div id="board"></div>
+        
+        <div id="board-container">
+            <div id="board"></div>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
         let myName, myRoom, isMyTurn = false, totalCaptured = 0;
-        let px = 100, py = 100, zoom = 0.8;
+        let px = 50, py = 50, zoom = 1.0;
         let scores = {};
+        const GRID_SIZE = 25;
 
         function login() {
             myName = document.getElementById('username').value;
@@ -103,7 +103,6 @@
         socket.on('loginAuthorized', (data) => {
             document.getElementById('auth-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'block';
-            if(data.isOwner) document.getElementById('owner-panel').style.display = 'block';
             initBoard();
             updatePos();
         });
@@ -111,8 +110,9 @@
         function initBoard() {
             const board = document.getElementById('board');
             const frag = document.createDocumentFragment();
-            for (let r = 0; r <= 100; r++) {
-                for (let c = 0; c <= 100; c++) {
+            // 25 boxes means row/col indices up to 50 (2n)
+            for (let r = 0; r <= GRID_SIZE * 2; r++) {
+                for (let c = 0; c <= GRID_SIZE * 2; c++) {
                     const div = document.createElement('div');
                     if (r % 2 === 0 && c % 2 === 0) div.className = 'dot';
                     else if (r % 2 === 0 && c % 2 !== 0) {
@@ -131,7 +131,7 @@
         }
 
         function tryMove(r, c) {
-            if (!isMyTurn) return;
+            if (!isMyTurn || !myRoom) return;
             const el = document.getElementById(`line-${r}-${c}`);
             if (el.classList.contains('taken')) return;
             socket.emit('makeMove', { r, c });
@@ -169,7 +169,10 @@
                 const box = document.getElementById(`box-${br}-${bc}`);
                 if (!box || box.style.background) return;
                 const sides = [`line-${br-1}-${bc}`, `line-${br+1}-${bc}`, `line-${br}-${bc-1}`, `line-${br}-${bc+1}`];
-                if (sides.every(id => document.getElementById(id).classList.contains('taken'))) {
+                if (sides.every(id => {
+                    const s = document.getElementById(id);
+                    return s && s.classList.contains('taken');
+                })) {
                     box.style.background = color;
                     box.style.boxShadow = `inset 0 0 20px ${color}`;
                     box.style.opacity = "0.3";
@@ -178,23 +181,35 @@
                     found++;
                 }
             });
-            if (totalCaptured === 2500) endGame();
+            if (totalCaptured === GRID_SIZE * GRID_SIZE) endGame();
             return found;
         }
 
-        // Navigation
+        function endGame() {
+            document.getElementById('end-screen').style.display = 'flex';
+            let stats = "";
+            Object.entries(scores).sort((a,b)=>b[1]-a[1]).forEach(([name, score]) => {
+                stats += `<p>${name}: ${score} boxes</p>`;
+            });
+            document.getElementById('final-stats').innerHTML = stats;
+        }
+
+        // Panning and Zooming logic
         function updateZoom(v) { zoom = parseFloat(v); updatePos(); }
         function updatePos() { document.getElementById('board').style.transform = `translate(${px}px, ${py}px) scale(${zoom})`; }
 
         window.addEventListener('wheel', (e) => {
             e.preventDefault();
-            zoom = Math.min(Math.max(zoom + (e.deltaY < 0 ? 0.05 : -0.05), 0.05), 1.5);
+            zoom = Math.min(Math.max(zoom + (e.deltaY < 0 ? 0.05 : -0.05), 0.1), 2.0);
             document.getElementById('zoom-range').value = zoom;
             updatePos();
         }, { passive: false });
 
         let dragging = false, lx, ly;
-        window.onmousedown = (e) => { if(e.target.tagName==='CANVAS'||e.target.id==='game-screen') { dragging=true; lx=e.clientX; ly=e.clientY; }};
+        window.onmousedown = (e) => { 
+            if(e.target.closest('#ui-layer')) return;
+            dragging=true; lx=e.clientX; ly=e.clientY; 
+        };
         window.onmouseup = () => dragging = false;
         window.onmousemove = (e) => {
             if(!dragging) return;
