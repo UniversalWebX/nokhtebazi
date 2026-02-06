@@ -10,7 +10,7 @@ const io = new Server(server);
 
 const DATA_FILE = path.join(__dirname, 'users.json');
 let isLockedDown = false;
-let rooms = {}; // Logic: { 'ROOMID': { players: [], turnIndex: 0, totalLines: 0 } }
+let rooms = {};
 
 if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, JSON.stringify({}));
 
@@ -18,10 +18,10 @@ app.use(express.static('public'));
 
 io.on('connection', (socket) => {
     socket.on('login', (username) => {
-        if (isLockedDown && username !== 'OWNER') return socket.emit('errorMsg', 'Site Locked.');
+        if (isLockedDown && username !== 'OWNER') return socket.emit('errorMsg', 'SERVER LOCKED');
         let users = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         if (!users[username]) {
-            users[username] = { score: 0, color: `hsl(${Math.random() * 360}, 75%, 50%)` };
+            users[username] = { score: 0, color: `hsl(${Math.random() * 360}, 80%, 60%)` };
             fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2));
         }
         socket.username = username;
@@ -32,66 +32,40 @@ io.on('connection', (socket) => {
     socket.on('joinRoom', (code) => {
         socket.join(code);
         socket.room = code;
-        if (!rooms[code]) rooms[code] = { players: [], turnIndex: 0, totalLines: 0 };
-        
-        // Add player to room list if not already there
+        if (!rooms[code]) rooms[code] = { players: [], turnIndex: 0 };
         if (!rooms[code].players.find(p => p.id === socket.id)) {
             rooms[code].players.push({ id: socket.id, name: socket.username, color: socket.color });
         }
-        
-        io.to(code).emit('updateTurn', {
-            currentPlayer: rooms[code].players[rooms[code].turnIndex].name,
-            players: rooms[code].players
-        });
+        updateRoomStatus(code);
     });
 
     socket.on('makeMove', (data) => {
         const room = rooms[socket.room];
-        if (!room) return;
-
-        // Check if it's actually this player's turn
-        const activePlayer = room.players[room.turnIndex];
-        if (activePlayer.id !== socket.id) return;
-
-        room.totalLines++;
-        
-        // Broadcast move
-        io.to(socket.room).emit('moveMade', { 
-            ...data, 
-            color: socket.color, 
-            userName: socket.username 
-        });
-
-        // The client will calculate if a box was closed and emit 'boxClosed'
+        if (!room || room.players[room.turnIndex].id !== socket.id) return;
+        io.to(socket.room).emit('moveMade', { ...data, color: socket.color, userName: socket.username });
     });
 
-    socket.on('boxClosed', () => {
-        // Player gets another turn if they closed a box
-        const room = rooms[socket.room];
-        if (room) {
-            io.to(socket.room).emit('updateTurn', {
-                currentPlayer: room.players[room.turnIndex].name,
-                players: room.players
-            });
-        }
-    });
-
+    socket.on('boxClosed', () => updateRoomStatus(socket.room)); // Same player goes again
     socket.on('nextTurn', () => {
-        const room = rooms[socket.room];
-        if (room) {
-            room.turnIndex = (room.turnIndex + 1) % room.players.length;
-            io.to(socket.room).emit('updateTurn', {
-                currentPlayer: room.players[room.turnIndex].name,
-                players: room.players
-            });
+        if (rooms[socket.room]) {
+            rooms[socket.room].turnIndex = (rooms[socket.room].turnIndex + 1) % rooms[socket.room].players.length;
+            updateRoomStatus(socket.room);
         }
     });
 
     socket.on('ownerAction', (data) => {
         if (socket.username !== 'OWNER') return;
-        if (data.action === 'lockdown') { isLockedDown = true; io.emit('kick', 'LOCKED.'); }
+        if (data.action === 'lockdown') { isLockedDown = true; io.emit('kick', 'LOCKDOWN'); }
         else if (data.action === 'unlock') isLockedDown = false;
     });
+
+    function updateRoomStatus(code) {
+        if (!rooms[code]) return;
+        io.to(code).emit('updateTurn', {
+            currentPlayer: rooms[code].players[rooms[code].turnIndex].name,
+            players: rooms[code].players
+        });
+    }
 
     socket.on('disconnect', () => {
         if (socket.room && rooms[socket.room]) {
