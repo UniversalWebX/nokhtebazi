@@ -1,96 +1,145 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Dots & Boxes Multiplayer</title>
+    <title>nokhtebazi</title>
     <style>
-        :root { --bg: #f4f4f9; --dot: #2c3e50; --line: #bdc3c7; --active: #e74c3c; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); text-align: center; }
-        #auth, #game-container { max-width: 500px; margin: 50px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .grid { display: grid; grid-template-columns: repeat(5, 20px 60px) 20px; gap: 0; margin: 20px auto; width: fit-content; }
-        .dot { width: 20px; height: 20px; background: var(--dot); border-radius: 50%; }
-        .line { background: var(--line); cursor: pointer; transition: 0.2s; }
-        .line:hover { background: #95a5a6; }
-        .line.h { width: 60px; height: 20px; }
-        .line.v { width: 20px; height: 60px; }
-        .line.taken { background: var(--active); cursor: default; }
-        #owner-panel { display: none; background: #fff5f5; border: 2px solid #ff4d4d; padding: 15px; margin-top: 20px; border-radius: 8px; }
-        button { padding: 10px 20px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px; }
+        body { font-family: sans-serif; background: #1a1a1a; color: white; margin: 0; overflow: hidden; }
+        #auth-ui { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        
+        /* Container for scrolling the massive 50x50 board */
+        #game-container { display: none; height: 100vh; overflow: auto; padding: 20px; }
+        
+        #board { 
+            display: grid; 
+            /* 50 boxes means 51 dots. Grid: dot(10px) line(30px) dot(10px)... */
+            grid-template-columns: repeat(50, 10px 30px) 10px;
+            grid-template-rows: repeat(50, 10px 30px) 10px;
+            background: #222; border: 5px solid #444; width: fit-content;
+        }
+
+        .dot { width: 10px; height: 10px; background: #555; border-radius: 50%; }
+        .line { background: #333; cursor: pointer; }
+        .line.h { width: 30px; height: 10px; }
+        .line.v { width: 10px; height: 30px; }
+        .line.taken { cursor: default; }
+        .box { width: 30px; height: 30px; transition: 0.3s; }
+
+        #controls { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; z-index: 100; }
+        #owner-panel { background: #400; padding: 10px; margin-top: 10px; border-radius: 4px; display: none; }
+        input { padding: 8px; border-radius: 4px; border: none; }
+        button { padding: 8px; background: #3498db; color: white; border: none; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <div id="auth">
-        <h2>Enter Username</h2>
-        <input type="text" id="userInput" placeholder="Type OWNER or your name">
-        <button onclick="login()">Enter</button>
+    <div id="auth-ui">
+        <h1>Dots & Boxes (50x50)</h1>
+        <input type="text" id="username" placeholder="Username">
+        <button onclick="login()">Enter Game</button>
     </div>
 
-    <div id="game-container" style="display:none;">
-        <h2 id="displayUser"></h2>
-        <input type="text" id="roomCode" placeholder="Party Code">
-        <button onclick="joinRoom()">Join Party</button>
-
-        <div class="grid" id="board">
+    <div id="game-container">
+        <div id="controls">
+            <div id="status">Login to start</div>
+            <input type="text" id="roomCode" placeholder="Party Code">
+            <button onclick="join()">Join Party</button>
+            <div id="owner-panel">
+                <strong>OWNER CTRL</strong><br>
+                <button onclick="owner('lockdown')">LOCKDOWN</button>
+                <button onclick="owner('unlock')">UNLOCK</button><br>
+                <input type="text" id="tName" placeholder="User" style="width:60px">
+                <input type="number" id="tScore" placeholder="Pts" style="width:40px">
+                <button onclick="setScore()">Set</button>
             </div>
-
-        <div id="owner-panel">
-            <h3>🛡️ OWNER CONTROL</h3>
-            <button onclick="ownerCmd('lockdown')" style="background:red">LOCKDOWN & KICK ALL</button>
-            <button onclick="ownerCmd('unlock')" style="background:green">UNLOCK</button>
-            <hr>
-            <input type="text" id="targetUser" placeholder="Username">
-            <input type="number" id="targetScore" placeholder="New Score">
-            <button onclick="setScore()">Modify Player Score</button>
         </div>
+        <div id="board"></div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let currentRoom = "";
+        const GRID_SIZE = 50; 
+        let myName, myColor, roomCode;
 
         function login() {
-            const user = document.getElementById('userInput').value;
-            socket.emit('login', user);
+            myName = document.getElementById('username').value;
+            socket.emit('login', myName);
         }
 
         socket.on('loginAuthorized', (data) => {
-            document.getElementById('auth').style.display = 'none';
+            myColor = data.color;
+            document.getElementById('auth-ui').style.display = 'none';
             document.getElementById('game-container').style.display = 'block';
-            document.getElementById('displayUser').innerText = "Player: " + data.username;
-            if (data.isOwner) document.getElementById('owner-panel').style.display = 'block';
-            createBoard();
+            document.getElementById('status').innerHTML = `User: <b style="color:${myColor}">${data.username}</b>`;
+            if(data.isOwner) document.getElementById('owner-panel').style.display = 'block';
+            buildBoard();
         });
 
-        function createBoard() {
+        function buildBoard() {
             const board = document.getElementById('board');
-            for (let i = 0; i < 50; i++) { // Simple representation
-                let div = document.createElement('div');
-                div.className = (i % 2 === 0) ? "dot" : "line h";
-                if(i > 10 && i % 3 === 0) div.className = "line v";
-                div.onclick = () => { if(div.classList.contains('line')) { div.classList.add('taken'); socket.emit('makeMove', {room: currentRoom, id: i}); }};
-                board.appendChild(div);
+            for (let r = 0; r <= GRID_SIZE * 2; r++) {
+                for (let c = 0; c <= GRID_SIZE * 2; c++) {
+                    const div = document.createElement('div');
+                    if (r % 2 === 0 && c % 2 === 0) div.className = 'dot';
+                    else if (r % 2 === 0 && c % 2 !== 0) setupLine(div, 'h', r, c);
+                    else if (r % 2 !== 0 && c % 2 === 0) setupLine(div, 'v', r, c);
+                    else { div.className = 'box'; div.id = `box-${r}-${c}`; }
+                    board.appendChild(div);
+                }
             }
         }
 
-        function joinRoom() {
-            currentRoom = document.getElementById('roomCode').value;
-            socket.emit('joinRoom', currentRoom);
-            alert("Joined " + currentRoom);
+        function setupLine(div, type, r, c) {
+            div.className = `line ${type}`;
+            div.id = `line-${r}-${c}`;
+            div.onclick = () => {
+                if(!roomCode) return alert("Join a party!");
+                if(!div.classList.contains('taken')) {
+                    socket.emit('makeMove', { room: roomCode, r, c });
+                }
+            };
         }
 
-        function ownerCmd(action) {
-            socket.emit('ownerAction', { action });
+        socket.on('moveMade', (data) => {
+            const line = document.getElementById(`line-${data.r}-${data.c}`);
+            line.style.background = data.color;
+            line.classList.add('taken');
+            checkBoxes(data.r, data.c, data.color);
+        });
+
+        function checkBoxes(r, c, color) {
+            const boxesToCheck = [];
+            if (r % 2 === 0) { // Horizontal line
+                boxesToCheck.push([r - 1, c], [r + 1, c]);
+            } else { // Vertical line
+                boxesToCheck.push([r, c - 1], [r, c + 1]);
+            }
+
+            boxesToCheck.forEach(([br, bc]) => {
+                const box = document.getElementById(`box-${br}-${bc}`);
+                if (!box || box.style.background) return;
+
+                const top = document.getElementById(`line-${br-1}-${bc}`).classList.contains('taken');
+                const bot = document.getElementById(`line-${br+1}-${bc}`).classList.contains('taken');
+                const lft = document.getElementById(`line-${br}-${bc-1}`).classList.contains('taken');
+                const rgt = document.getElementById(`line-${br}-${bc+1}`).classList.contains('taken');
+
+                if (top && bot && lft && rgt) {
+                    box.style.background = color;
+                }
+            });
         }
 
+        function join() { roomCode = document.getElementById('roomCode').value; socket.emit('joinRoom', roomCode); }
+        function owner(action) { socket.emit('ownerAction', { action }); }
         function setScore() {
-            const target = document.getElementById('targetUser').value;
-            const value = document.getElementById('targetScore').value;
-            socket.emit('ownerAction', { action: 'setScore', target, value });
+            socket.emit('ownerAction', { 
+                action: 'setScore', 
+                target: document.getElementById('tName').value, 
+                value: document.getElementById('tScore').value 
+            });
         }
-
-        socket.on('kick', (msg) => { alert(msg); location.reload(); });
-        socket.on('errorMsg', (msg) => alert(msg));
+        socket.on('kick', (m) => { alert(m); location.reload(); });
     </script>
 </body>
 </html>
