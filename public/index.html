@@ -1,76 +1,51 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dots & Boxes Multi-50x50</title>
+    <title>frog</title>
     <style>
-        :root { --bg: #121212; --panel: #1e1e1e; --dot: #555; --line: #333; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; margin: 0; overflow: hidden; }
-        
-        /* Auth Screen */
-        #auth-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        input { padding: 12px; border-radius: 5px; border: none; margin: 10px; width: 200px; }
-        button { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        
-        /* Game Screen */
-        #game-screen { display: none; width: 100vw; height: 100vh; position: relative; cursor: grab; }
-        #game-screen:active { cursor: grabbing; }
-
-        /* Board Styling */
-        #board {
-            position: absolute; display: grid;
-            grid-template-columns: repeat(50, 10px 40px) 10px;
-            grid-template-rows: repeat(50, 10px 40px) 10px;
-            background: #222; border: 10px solid #2c2c2c;
-            transform-origin: 0 0; will-change: transform;
-        }
-        .dot { width: 10px; height: 10px; background: var(--dot); border-radius: 50%; }
-        .line { background: var(--line); transition: 0.2s; }
+        body { font-family: sans-serif; background: #111; color: #fff; margin: 0; overflow: hidden; }
+        #auth-screen, #end-screen { position: fixed; inset: 0; background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; }
+        #game-screen { display: none; width: 100vw; height: 100vh; position: relative; }
+        #ui-layer { position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; z-index: 100; pointer-events: auto; border: 1px solid #444; }
+        #board { position: absolute; display: grid; grid-template-columns: repeat(50, 10px 40px) 10px; grid-template-rows: repeat(50, 10px 40px) 10px; transform-origin: 0 0; }
+        .dot { width: 10px; height: 10px; background: #555; border-radius: 50%; }
+        .line { background: #222; cursor: pointer; }
         .line.h { width: 40px; height: 10px; }
         .line.v { width: 10px; height: 40px; }
         .line.taken { cursor: default; }
         .box { width: 40px; height: 40px; }
-
-        /* UI Overlays */
-        #ui-overlay { position: fixed; top: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; z-index: 10; pointer-events: auto; }
-        #owner-panel { display: none; margin-top: 15px; border-top: 2px solid #ff4444; padding-top: 10px; }
-        #tutorial { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; display: flex; align-items: center; justify-content: center; text-align: center; }
+        .turn-highlight { border: 2px solid yellow; padding: 5px; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
+        #owner-panel { display: none; margin-top: 10px; border-top: 1px solid red; }
     </style>
 </head>
 <body>
 
     <div id="auth-screen">
         <h1>Dots & Boxes</h1>
-        <input type="text" id="username" placeholder="Pick a name">
-        <button onclick="login()">Enter Arena</button>
+        <input type="text" id="username" placeholder="Username">
+        <button onclick="login()">Start Game</button>
     </div>
 
-    <div id="tutorial" style="display:none">
-        <div>
-            <h2>50x50 Massive Map</h2>
-            <p>⌨️ Use <b>Arrow Keys</b> to pan<br>🖱️ <b>Click & Drag</b> or <b>Swipe</b> to move</p>
-            <button onclick="document.getElementById('tutorial').style.display='none'">Start Playing</button>
-        </div>
+    <div id="end-screen" style="display:none">
+        <h1>Game Over!</h1>
+        <div id="final-stats"></div>
+        <button onclick="location.reload()">Play Again</button>
     </div>
 
     <div id="game-screen">
-        <div id="ui-overlay">
-            <div id="p-info"></div>
-            <div id="room-controls">
+        <div id="ui-layer">
+            <div id="turn-display">Waiting for players...</div>
+            <div id="party-controls">
                 <button onclick="createParty()">Create Party</button>
-                <input type="text" id="join-code" placeholder="6-Char Code" style="width:100px">
-                <button onclick="joinParty()">Join</button>
+                <input type="text" id="party-code" placeholder="6-Char Code" style="width:100px">
+                <button onclick="join()">Join</button>
             </div>
-            <div id="active-room" style="display:none">Room: <b id="room-id" style="color:yellow"></b></div>
+            <div id="active-party" style="display:none">Room: <b id="room-text"></b></div>
+            <div id="scoreboard"></div>
             
             <div id="owner-panel">
-                <strong>OWNER PANEL</strong><br>
-                <button onclick="ownerAction('lockdown')" style="background:red">LOCKDOWN</button>
-                <button onclick="ownerAction('unlock')" style="background:green">UNLOCK</button><br>
-                <input type="text" id="t-user" placeholder="Name" style="width:80px">
-                <input type="number" id="t-score" placeholder="Pts" style="width:50px">
-                <button onclick="setScore()">Update</button>
+                <button onclick="socket.emit('ownerAction', {action:'lockdown'})">LOCKDOWN</button>
             </div>
         </div>
         <div id="board"></div>
@@ -79,115 +54,118 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myName, myColor, myRoom;
-        let posX = 0, posY = 0;
+        let myName, myRoom, isMyTurn = false, totalCaptured = 0;
+        let scores = {};
+        const TOTAL_BOXES = 2500; // 50x50
 
-        // Login Logic
         function login() {
             myName = document.getElementById('username').value;
-            if (myName) socket.emit('login', myName);
+            if(myName) socket.emit('login', myName);
         }
 
         socket.on('loginAuthorized', (data) => {
             document.getElementById('auth-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'block';
-            document.getElementById('tutorial').style.display = 'flex';
-            document.getElementById('p-info').innerHTML = `Player: <b style="color:${data.color}">${data.username}</b>`;
-            if (data.isOwner) document.getElementById('owner-panel').style.display = 'block';
+            if(data.isOwner) document.getElementById('owner-panel').style.display = 'block';
             initBoard();
         });
 
-        // Board Generation
         function initBoard() {
             const board = document.getElementById('board');
             for (let r = 0; r <= 100; r++) {
                 for (let c = 0; c <= 100; c++) {
                     const div = document.createElement('div');
                     if (r % 2 === 0 && c % 2 === 0) div.className = 'dot';
-                    else if (r % 2 === 0 && c % 2 !== 0) setupLine(div, 'h', r, c);
-                    else if (r % 2 !== 0 && c % 2 === 0) setupLine(div, 'v', r, c);
-                    else { div.className = 'box'; div.id = `box-${r}-${c}`; }
+                    else if (r % 2 === 0 && c % 2 !== 0) {
+                        div.className = 'line h'; div.id = `line-${r}-${c}`;
+                        div.onclick = () => tryMove(r, c);
+                    } else if (r % 2 !== 0 && c % 2 === 0) {
+                        div.className = 'line v'; div.id = `line-${r}-${c}`;
+                        div.onclick = () => tryMove(r, c);
+                    } else {
+                        div.className = 'box'; div.id = `box-${r}-${c}`;
+                    }
                     board.appendChild(div);
                 }
             }
         }
 
-        function setupLine(el, type, r, c) {
-            el.className = `line ${type}`; el.id = `line-${r}-${c}`;
-            el.onclick = () => {
-                if (!myRoom) return alert("Join a party first!");
-                if (!el.classList.contains('taken')) socket.emit('makeMove', { r, c });
-            };
+        function tryMove(r, c) {
+            if (!isMyTurn) return alert("Not your turn!");
+            const el = document.getElementById(`line-${r}-${c}`);
+            if (el.classList.contains('taken')) return;
+            socket.emit('makeMove', { room: myRoom, r, c });
         }
 
-        // Room Logic
-        function createParty() {
-            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-            document.getElementById('join-code').value = code;
-            joinParty();
-        }
+        socket.on('updateTurn', (data) => {
+            isMyTurn = (data.currentPlayer === myName);
+            document.getElementById('turn-display').innerHTML = isMyTurn ? 
+                "<b class='turn-highlight'>YOUR TURN!</b>" : `Turn: ${data.currentPlayer}`;
+            
+            // Update Scoreboard UI
+            let html = "";
+            data.players.forEach(p => {
+                html += `<div style="color:${p.color}">${p.name}: ${scores[p.name] || 0}</div>`;
+            });
+            document.getElementById('scoreboard').innerHTML = html;
+        });
 
-        function joinParty() {
-            myRoom = document.getElementById('join-code').value.toUpperCase();
-            if (myRoom.length !== 6) return alert("Invalid Code");
-            socket.emit('joinRoom', myRoom);
-            document.getElementById('room-controls').style.display = 'none';
-            document.getElementById('active-room').style.display = 'block';
-            document.getElementById('room-id').innerText = myRoom;
-        }
-
-        // Game Logic
         socket.on('moveMade', (data) => {
             const line = document.getElementById(`line-${data.r}-${data.c}`);
             line.style.background = data.color;
             line.classList.add('taken');
-            checkWin(data.r, data.c, data.color);
+
+            const boxesClosed = checkBoxes(data.r, data.c, data.color, data.userName);
+            
+            if (data.userName === myName) {
+                if (boxesClosed > 0) socket.emit('boxClosed');
+                else socket.emit('nextTurn');
+            }
         });
 
-        function checkWin(r, c, color) {
+        function checkBoxes(r, c, color, user) {
+            let found = 0;
             const potential = (r % 2 === 0) ? [[r-1, c], [r+1, c]] : [[r, c-1], [r, c+1]];
+            
             potential.forEach(([br, bc]) => {
                 const box = document.getElementById(`box-${br}-${bc}`);
                 if (!box || box.style.background) return;
                 const sides = [`line-${br-1}-${bc}`, `line-${br+1}-${bc}`, `line-${br}-${bc-1}`, `line-${br}-${bc+1}`];
-                if (sides.every(id => document.getElementById(id).classList.contains('taken'))) {
+                if (sides.every(s => document.getElementById(s).classList.contains('taken'))) {
                     box.style.background = color;
-                    box.style.opacity = "0.5";
+                    box.style.opacity = "0.6";
+                    scores[user] = (scores[user] || 0) + 1;
+                    totalCaptured++;
+                    found++;
                 }
             });
+
+            if (totalCaptured === TOTAL_BOXES) endGame();
+            return found;
         }
 
-        // Navigation (Arrow Keys & Drag)
-        const boardEl = document.getElementById('board');
-        const updatePos = () => boardEl.style.transform = `translate(${posX}px, ${posY}px)`;
-
-        window.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowUp') posY += 50; if (e.key === 'ArrowDown') posY -= 50;
-            if (e.key === 'ArrowLeft') posX += 50; if (e.key === 'ArrowRight') posX -= 50;
-            updatePos();
-        });
-
-        let dragging = false, lastX, lastY;
-        window.onmousedown = (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; };
-        window.onmouseup = () => dragging = false;
-        window.onmousemove = (e) => {
-            if (!dragging) return;
-            posX += e.clientX - lastX; posY += e.clientY - lastY;
-            lastX = e.clientX; lastY = e.clientY; updatePos();
-        };
-
-        // Owner Controls
-        function ownerAction(action) { socket.emit('ownerAction', { action }); }
-        function setScore() { 
-            socket.emit('ownerAction', { 
-                action: 'setScore', 
-                target: document.getElementById('t-user').value, 
-                value: document.getElementById('t-score').value 
-            }); 
+        function endGame() {
+            document.getElementById('end-screen').style.display = 'flex';
+            let stats = "";
+            Object.entries(scores).forEach(([name, score]) => {
+                stats += `<p>${name}: ${score} boxes</p>`;
+            });
+            document.getElementById('final-stats').innerHTML = stats;
         }
 
-        socket.on('kick', (msg) => { alert(msg); location.reload(); });
-        socket.on('errorMsg', (msg) => alert(msg));
+        // Navigation and Party Logic (Same as previous)
+        function createParty() { const c = Math.random().toString(36).substring(2, 8).toUpperCase(); document.getElementById('party-code').value = c; join(); }
+        function join() { 
+            myRoom = document.getElementById('party-code').value.toUpperCase(); 
+            socket.emit('joinRoom', myRoom); 
+            document.getElementById('party-controls').style.display = 'none';
+            document.getElementById('active-party').style.display = 'block';
+            document.getElementById('room-text').innerText = myRoom;
+        }
+
+        let px=0, py=0;
+        window.onkeydown=(e)=>{if(e.key=='ArrowUp')py+=40;if(e.key=='ArrowDown')py-=40;if(e.key=='ArrowLeft')px+=40;if(e.key=='ArrowRight')px-=40;document.getElementById('board').style.transform=`translate(${px}px,${py}px)`};
+        socket.on('kick', (m)=>{alert(m);location.reload();});
     </script>
 </body>
 </html>
