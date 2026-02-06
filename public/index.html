@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Dots & Boxes Multiplayer</title>
+    <style>
+        :root { --bg: #f4f4f9; --dot: #2c3e50; --line: #bdc3c7; --active: #e74c3c; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); text-align: center; }
+        #auth, #game-container { max-width: 500px; margin: 50px auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .grid { display: grid; grid-template-columns: repeat(5, 20px 60px) 20px; gap: 0; margin: 20px auto; width: fit-content; }
+        .dot { width: 20px; height: 20px; background: var(--dot); border-radius: 50%; }
+        .line { background: var(--line); cursor: pointer; transition: 0.2s; }
+        .line:hover { background: #95a5a6; }
+        .line.h { width: 60px; height: 20px; }
+        .line.v { width: 20px; height: 60px; }
+        .line.taken { background: var(--active); cursor: default; }
+        #owner-panel { display: none; background: #fff5f5; border: 2px solid #ff4d4d; padding: 15px; margin-top: 20px; border-radius: 8px; }
+        button { padding: 10px 20px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div id="auth">
+        <h2>Enter Username</h2>
+        <input type="text" id="userInput" placeholder="Type OWNER or your name">
+        <button onclick="login()">Enter</button>
+    </div>
+
+    <div id="game-container" style="display:none;">
+        <h2 id="displayUser"></h2>
+        <input type="text" id="roomCode" placeholder="Party Code">
+        <button onclick="joinRoom()">Join Party</button>
+
+        <div class="grid" id="board">
+            </div>
+
+        <div id="owner-panel">
+            <h3>🛡️ OWNER CONTROL</h3>
+            <button onclick="ownerCmd('lockdown')" style="background:red">LOCKDOWN & KICK ALL</button>
+            <button onclick="ownerCmd('unlock')" style="background:green">UNLOCK</button>
+            <hr>
+            <input type="text" id="targetUser" placeholder="Username">
+            <input type="number" id="targetScore" placeholder="New Score">
+            <button onclick="setScore()">Modify Player Score</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let currentRoom = "";
+
+        function login() {
+            const user = document.getElementById('userInput').value;
+            socket.emit('login', user);
+        }
+
+        socket.on('loginAuthorized', (data) => {
+            document.getElementById('auth').style.display = 'none';
+            document.getElementById('game-container').style.display = 'block';
+            document.getElementById('displayUser').innerText = "Player: " + data.username;
+            if (data.isOwner) document.getElementById('owner-panel').style.display = 'block';
+            createBoard();
+        });
+
+        function createBoard() {
+            const board = document.getElementById('board');
+            for (let i = 0; i < 50; i++) { // Simple representation
+                let div = document.createElement('div');
+                div.className = (i % 2 === 0) ? "dot" : "line h";
+                if(i > 10 && i % 3 === 0) div.className = "line v";
+                div.onclick = () => { if(div.classList.contains('line')) { div.classList.add('taken'); socket.emit('makeMove', {room: currentRoom, id: i}); }};
+                board.appendChild(div);
+            }
+        }
+
+        function joinRoom() {
+            currentRoom = document.getElementById('roomCode').value;
+            socket.emit('joinRoom', currentRoom);
+            alert("Joined " + currentRoom);
+        }
+
+        function ownerCmd(action) {
+            socket.emit('ownerAction', { action });
+        }
+
+        function setScore() {
+            const target = document.getElementById('targetUser').value;
+            const value = document.getElementById('targetScore').value;
+            socket.emit('ownerAction', { action: 'setScore', target, value });
+        }
+
+        socket.on('kick', (msg) => { alert(msg); location.reload(); });
+        socket.on('errorMsg', (msg) => alert(msg));
+    </script>
+</body>
+</html>
