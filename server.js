@@ -18,7 +18,7 @@ app.use(express.static('public'));
 
 io.on('connection', (socket) => {
     socket.on('login', (username) => {
-        if (isLockedDown && username !== 'OWNER') return socket.emit('errorMsg', 'Server is currently locked.');
+        if (isLockedDown && username !== 'OWNER') return socket.emit('errorMsg', 'Server is locked.');
         let users = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         if (!users[username]) {
             users[username] = { score: 0, color: `hsl(${Math.random() * 360}, 70%, 55%)` };
