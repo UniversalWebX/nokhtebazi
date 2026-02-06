@@ -9,7 +9,6 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const DATA_FILE = path.join(__dirname, 'users.json');
-let isLockedDown = false;
 let rooms = {};
 
 if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, JSON.stringify({}));
@@ -18,15 +17,14 @@ app.use(express.static('public'));
 
 io.on('connection', (socket) => {
     socket.on('login', (username) => {
-        if (isLockedDown && username !== 'OWNER') return socket.emit('errorMsg', 'Server is locked.');
         let users = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
         if (!users[username]) {
-            users[username] = { score: 0, color: `hsl(${Math.random() * 360}, 70%, 55%)` };
+            users[username] = { color: `hsl(${Math.random() * 360}, 70%, 55%)` };
             fs.writeFileSync(DATA_FILE, JSON.stringify(users, null, 2));
         }
         socket.username = username;
         socket.color = users[username].color;
-        socket.emit('loginAuthorized', { username, color: socket.color, isOwner: username === 'OWNER' });
+        socket.emit('loginAuthorized', { username, color: socket.color });
     });
 
     socket.on('joinRoom', (code) => {
