@@ -1,39 +1,193 @@
-<div id="nav-hint">
-    <div class="hint-content">
-        <h2>50x50 World</h2>
-        <p>Use <b>Arrow Keys</b> to move around<br>or <b>Swipe/Drag</b> the board to navigate.</p>
-        <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dots & Boxes Multi-50x50</title>
+    <style>
+        :root { --bg: #121212; --panel: #1e1e1e; --dot: #555; --line: #333; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: white; margin: 0; overflow: hidden; }
+        
+        /* Auth Screen */
+        #auth-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        input { padding: 12px; border-radius: 5px; border: none; margin: 10px; width: 200px; }
+        button { padding: 12px 24px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        
+        /* Game Screen */
+        #game-screen { display: none; width: 100vw; height: 100vh; position: relative; cursor: grab; }
+        #game-screen:active { cursor: grabbing; }
+
+        /* Board Styling */
+        #board {
+            position: absolute; display: grid;
+            grid-template-columns: repeat(50, 10px 40px) 10px;
+            grid-template-rows: repeat(50, 10px 40px) 10px;
+            background: #222; border: 10px solid #2c2c2c;
+            transform-origin: 0 0; will-change: transform;
+        }
+        .dot { width: 10px; height: 10px; background: var(--dot); border-radius: 50%; }
+        .line { background: var(--line); transition: 0.2s; }
+        .line.h { width: 40px; height: 10px; }
+        .line.v { width: 10px; height: 40px; }
+        .line.taken { cursor: default; }
+        .box { width: 40px; height: 40px; }
+
+        /* UI Overlays */
+        #ui-overlay { position: fixed; top: 15px; left: 15px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 10px; z-index: 10; pointer-events: auto; }
+        #owner-panel { display: none; margin-top: 15px; border-top: 2px solid #ff4444; padding-top: 10px; }
+        #tutorial { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; display: flex; align-items: center; justify-content: center; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div id="auth-screen">
+        <h1>Dots & Boxes</h1>
+        <input type="text" id="username" placeholder="Pick a name">
+        <button onclick="login()">Enter Arena</button>
     </div>
-</div>
 
-<style>
-    /* Navigation Hint Popup */
-    #nav-hint {
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.8); z-index: 1000;
-        display: flex; align-items: center; justify-content: center;
-    }
-    .hint-content {
-        background: #333; padding: 30px; border-radius: 15px;
-        text-align: center; border: 2px solid #555;
-    }
+    <div id="tutorial" style="display:none">
+        <div>
+            <h2>50x50 Massive Map</h2>
+            <p>⌨️ Use <b>Arrow Keys</b> to pan<br>🖱️ <b>Click & Drag</b> or <b>Swipe</b> to move</p>
+            <button onclick="document.getElementById('tutorial').style.display='none'">Start Playing</button>
+        </div>
+    </div>
 
-    /* Make the container a viewport */
-    #game-screen {
-        position: relative;
-        width: 100vw;
-        height: 100vh;
-        overflow: hidden; /* We handle scrolling via logic */
-        cursor: grab;
-    }
-    #game-screen:active { cursor: grabbing; }
+    <div id="game-screen">
+        <div id="ui-overlay">
+            <div id="p-info"></div>
+            <div id="room-controls">
+                <button onclick="createParty()">Create Party</button>
+                <input type="text" id="join-code" placeholder="6-Char Code" style="width:100px">
+                <button onclick="joinParty()">Join</button>
+            </div>
+            <div id="active-room" style="display:none">Room: <b id="room-id" style="color:yellow"></b></div>
+            
+            <div id="owner-panel">
+                <strong>OWNER PANEL</strong><br>
+                <button onclick="ownerAction('lockdown')" style="background:red">LOCKDOWN</button>
+                <button onclick="ownerAction('unlock')" style="background:green">UNLOCK</button><br>
+                <input type="text" id="t-user" placeholder="Name" style="width:80px">
+                <input type="number" id="t-score" placeholder="Pts" style="width:50px">
+                <button onclick="setScore()">Update</button>
+            </div>
+        </div>
+        <div id="board"></div>
+    </div>
 
-    #board {
-        position: absolute; /* Needed for arrow/drag logic */
-        top: 0; left: 0;
-        display: grid;
-        grid-template-columns: repeat(50, 10px 40px) 10px;
-        grid-template-rows: repeat(50, 10px 40px) 10px;
-        transition: transform 0.1s ease-out; /* Smooth movement */
-    }
-</style>
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        let myName, myColor, myRoom;
+        let posX = 0, posY = 0;
+
+        // Login Logic
+        function login() {
+            myName = document.getElementById('username').value;
+            if (myName) socket.emit('login', myName);
+        }
+
+        socket.on('loginAuthorized', (data) => {
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'block';
+            document.getElementById('tutorial').style.display = 'flex';
+            document.getElementById('p-info').innerHTML = `Player: <b style="color:${data.color}">${data.username}</b>`;
+            if (data.isOwner) document.getElementById('owner-panel').style.display = 'block';
+            initBoard();
+        });
+
+        // Board Generation
+        function initBoard() {
+            const board = document.getElementById('board');
+            for (let r = 0; r <= 100; r++) {
+                for (let c = 0; c <= 100; c++) {
+                    const div = document.createElement('div');
+                    if (r % 2 === 0 && c % 2 === 0) div.className = 'dot';
+                    else if (r % 2 === 0 && c % 2 !== 0) setupLine(div, 'h', r, c);
+                    else if (r % 2 !== 0 && c % 2 === 0) setupLine(div, 'v', r, c);
+                    else { div.className = 'box'; div.id = `box-${r}-${c}`; }
+                    board.appendChild(div);
+                }
+            }
+        }
+
+        function setupLine(el, type, r, c) {
+            el.className = `line ${type}`; el.id = `line-${r}-${c}`;
+            el.onclick = () => {
+                if (!myRoom) return alert("Join a party first!");
+                if (!el.classList.contains('taken')) socket.emit('makeMove', { r, c });
+            };
+        }
+
+        // Room Logic
+        function createParty() {
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            document.getElementById('join-code').value = code;
+            joinParty();
+        }
+
+        function joinParty() {
+            myRoom = document.getElementById('join-code').value.toUpperCase();
+            if (myRoom.length !== 6) return alert("Invalid Code");
+            socket.emit('joinRoom', myRoom);
+            document.getElementById('room-controls').style.display = 'none';
+            document.getElementById('active-room').style.display = 'block';
+            document.getElementById('room-id').innerText = myRoom;
+        }
+
+        // Game Logic
+        socket.on('moveMade', (data) => {
+            const line = document.getElementById(`line-${data.r}-${data.c}`);
+            line.style.background = data.color;
+            line.classList.add('taken');
+            checkWin(data.r, data.c, data.color);
+        });
+
+        function checkWin(r, c, color) {
+            const potential = (r % 2 === 0) ? [[r-1, c], [r+1, c]] : [[r, c-1], [r, c+1]];
+            potential.forEach(([br, bc]) => {
+                const box = document.getElementById(`box-${br}-${bc}`);
+                if (!box || box.style.background) return;
+                const sides = [`line-${br-1}-${bc}`, `line-${br+1}-${bc}`, `line-${br}-${bc-1}`, `line-${br}-${bc+1}`];
+                if (sides.every(id => document.getElementById(id).classList.contains('taken'))) {
+                    box.style.background = color;
+                    box.style.opacity = "0.5";
+                }
+            });
+        }
+
+        // Navigation (Arrow Keys & Drag)
+        const boardEl = document.getElementById('board');
+        const updatePos = () => boardEl.style.transform = `translate(${posX}px, ${posY}px)`;
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowUp') posY += 50; if (e.key === 'ArrowDown') posY -= 50;
+            if (e.key === 'ArrowLeft') posX += 50; if (e.key === 'ArrowRight') posX -= 50;
+            updatePos();
+        });
+
+        let dragging = false, lastX, lastY;
+        window.onmousedown = (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; };
+        window.onmouseup = () => dragging = false;
+        window.onmousemove = (e) => {
+            if (!dragging) return;
+            posX += e.clientX - lastX; posY += e.clientY - lastY;
+            lastX = e.clientX; lastY = e.clientY; updatePos();
+        };
+
+        // Owner Controls
+        function ownerAction(action) { socket.emit('ownerAction', { action }); }
+        function setScore() { 
+            socket.emit('ownerAction', { 
+                action: 'setScore', 
+                target: document.getElementById('t-user').value, 
+                value: document.getElementById('t-score').value 
+            }); 
+        }
+
+        socket.on('kick', (msg) => { alert(msg); location.reload(); });
+        socket.on('errorMsg', (msg) => alert(msg));
+    </script>
+</body>
+</html>
