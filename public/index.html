@@ -1,145 +1,39 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>nokhtebazi</title>
-    <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: white; margin: 0; overflow: hidden; }
-        #auth-ui { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        
-        /* Container for scrolling the massive 50x50 board */
-        #game-container { display: none; height: 100vh; overflow: auto; padding: 20px; }
-        
-        #board { 
-            display: grid; 
-            /* 50 boxes means 51 dots. Grid: dot(10px) line(30px) dot(10px)... */
-            grid-template-columns: repeat(50, 10px 30px) 10px;
-            grid-template-rows: repeat(50, 10px 30px) 10px;
-            background: #222; border: 5px solid #444; width: fit-content;
-        }
-
-        .dot { width: 10px; height: 10px; background: #555; border-radius: 50%; }
-        .line { background: #333; cursor: pointer; }
-        .line.h { width: 30px; height: 10px; }
-        .line.v { width: 10px; height: 30px; }
-        .line.taken { cursor: default; }
-        .box { width: 30px; height: 30px; transition: 0.3s; }
-
-        #controls { position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); padding: 15px; border-radius: 8px; z-index: 100; }
-        #owner-panel { background: #400; padding: 10px; margin-top: 10px; border-radius: 4px; display: none; }
-        input { padding: 8px; border-radius: 4px; border: none; }
-        button { padding: 8px; background: #3498db; color: white; border: none; cursor: pointer; }
-    </style>
-</head>
-<body>
-
-    <div id="auth-ui">
-        <h1>Dots & Boxes (50x50)</h1>
-        <input type="text" id="username" placeholder="Username">
-        <button onclick="login()">Enter Game</button>
+<div id="nav-hint">
+    <div class="hint-content">
+        <h2>50x50 World</h2>
+        <p>Use <b>Arrow Keys</b> to move around<br>or <b>Swipe/Drag</b> the board to navigate.</p>
+        <button onclick="this.parentElement.parentElement.remove()">Got it!</button>
     </div>
+</div>
 
-    <div id="game-container">
-        <div id="controls">
-            <div id="status">Login to start</div>
-            <input type="text" id="roomCode" placeholder="Party Code">
-            <button onclick="join()">Join Party</button>
-            <div id="owner-panel">
-                <strong>OWNER CTRL</strong><br>
-                <button onclick="owner('lockdown')">LOCKDOWN</button>
-                <button onclick="owner('unlock')">UNLOCK</button><br>
-                <input type="text" id="tName" placeholder="User" style="width:60px">
-                <input type="number" id="tScore" placeholder="Pts" style="width:40px">
-                <button onclick="setScore()">Set</button>
-            </div>
-        </div>
-        <div id="board"></div>
-    </div>
+<style>
+    /* Navigation Hint Popup */
+    #nav-hint {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); z-index: 1000;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .hint-content {
+        background: #333; padding: 30px; border-radius: 15px;
+        text-align: center; border: 2px solid #555;
+    }
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script>
-        const socket = io();
-        const GRID_SIZE = 50; 
-        let myName, myColor, roomCode;
+    /* Make the container a viewport */
+    #game-screen {
+        position: relative;
+        width: 100vw;
+        height: 100vh;
+        overflow: hidden; /* We handle scrolling via logic */
+        cursor: grab;
+    }
+    #game-screen:active { cursor: grabbing; }
 
-        function login() {
-            myName = document.getElementById('username').value;
-            socket.emit('login', myName);
-        }
-
-        socket.on('loginAuthorized', (data) => {
-            myColor = data.color;
-            document.getElementById('auth-ui').style.display = 'none';
-            document.getElementById('game-container').style.display = 'block';
-            document.getElementById('status').innerHTML = `User: <b style="color:${myColor}">${data.username}</b>`;
-            if(data.isOwner) document.getElementById('owner-panel').style.display = 'block';
-            buildBoard();
-        });
-
-        function buildBoard() {
-            const board = document.getElementById('board');
-            for (let r = 0; r <= GRID_SIZE * 2; r++) {
-                for (let c = 0; c <= GRID_SIZE * 2; c++) {
-                    const div = document.createElement('div');
-                    if (r % 2 === 0 && c % 2 === 0) div.className = 'dot';
-                    else if (r % 2 === 0 && c % 2 !== 0) setupLine(div, 'h', r, c);
-                    else if (r % 2 !== 0 && c % 2 === 0) setupLine(div, 'v', r, c);
-                    else { div.className = 'box'; div.id = `box-${r}-${c}`; }
-                    board.appendChild(div);
-                }
-            }
-        }
-
-        function setupLine(div, type, r, c) {
-            div.className = `line ${type}`;
-            div.id = `line-${r}-${c}`;
-            div.onclick = () => {
-                if(!roomCode) return alert("Join a party!");
-                if(!div.classList.contains('taken')) {
-                    socket.emit('makeMove', { room: roomCode, r, c });
-                }
-            };
-        }
-
-        socket.on('moveMade', (data) => {
-            const line = document.getElementById(`line-${data.r}-${data.c}`);
-            line.style.background = data.color;
-            line.classList.add('taken');
-            checkBoxes(data.r, data.c, data.color);
-        });
-
-        function checkBoxes(r, c, color) {
-            const boxesToCheck = [];
-            if (r % 2 === 0) { // Horizontal line
-                boxesToCheck.push([r - 1, c], [r + 1, c]);
-            } else { // Vertical line
-                boxesToCheck.push([r, c - 1], [r, c + 1]);
-            }
-
-            boxesToCheck.forEach(([br, bc]) => {
-                const box = document.getElementById(`box-${br}-${bc}`);
-                if (!box || box.style.background) return;
-
-                const top = document.getElementById(`line-${br-1}-${bc}`).classList.contains('taken');
-                const bot = document.getElementById(`line-${br+1}-${bc}`).classList.contains('taken');
-                const lft = document.getElementById(`line-${br}-${bc-1}`).classList.contains('taken');
-                const rgt = document.getElementById(`line-${br}-${bc+1}`).classList.contains('taken');
-
-                if (top && bot && lft && rgt) {
-                    box.style.background = color;
-                }
-            });
-        }
-
-        function join() { roomCode = document.getElementById('roomCode').value; socket.emit('joinRoom', roomCode); }
-        function owner(action) { socket.emit('ownerAction', { action }); }
-        function setScore() {
-            socket.emit('ownerAction', { 
-                action: 'setScore', 
-                target: document.getElementById('tName').value, 
-                value: document.getElementById('tScore').value 
-            });
-        }
-        socket.on('kick', (m) => { alert(m); location.reload(); });
-    </script>
-</body>
-</html>
+    #board {
+        position: absolute; /* Needed for arrow/drag logic */
+        top: 0; left: 0;
+        display: grid;
+        grid-template-columns: repeat(50, 10px 40px) 10px;
+        grid-template-rows: repeat(50, 10px 40px) 10px;
+        transition: transform 0.1s ease-out; /* Smooth movement */
+    }
+</style>
