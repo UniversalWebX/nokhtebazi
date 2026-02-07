@@ -42,12 +42,13 @@
         /* Joystick Styles */
         #joystick-wrapper { 
             position: fixed; bottom: 40px; left: 40px; width: 100px; height: 100px; 
-            background: rgba(255,255,255,0.1); border-radius: 50%; display: none; 
-            touch-action: none; z-index: 1000; border: 1px solid var(--accent);
+            background: rgba(0, 242, 255, 0.05); border-radius: 50%; display: none; 
+            touch-action: none; z-index: 1000; border: 2px solid rgba(0, 242, 255, 0.3);
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
         }
         #joystick-stick { 
             position: absolute; top: 25px; left: 25px; width: 50px; height: 50px; 
-            background: var(--accent); border-radius: 50%; opacity: 0.6;
+            background: var(--accent); border-radius: 50%; opacity: 0.6; pointer-events: none;
         }
 
         button { background: var(--accent); border: none; color: #000; padding: 12px; border-radius: 6px; cursor: pointer; font-family: 'Orbitron'; font-weight: bold; width: 100%; margin-top: 8px; font-size: 14px; }
@@ -106,13 +107,15 @@
         let myName, myRoom, isMyTurn = false, boxesLeft = 625;
         let px = -500, py = -500, zoom = 0.8;
         let scores = {}, currentLang = 'en';
+        
+        // Limits to keep the board in view
+        const MAP_LIMIT = 2000; 
 
         const translations = {
             en: { mainTitle: "Nokhtebazi", enterName: "Enter Name", playGame: "Play Game", gameOver: "Game Over", playAgain: "Play Again", turn: "Turn", yourTurn: "Your Turn", createRoom: "Create Room", joinRoom: "Join Room", roomCode: "Room Code", room: "Room:", zoom: "ZOOM LEVEL" },
             fa: { mainTitle: "نقطه بازی", enterName: "نام خود را وارد کنید", playGame: "شروع بازی", gameOver: "بازی تمام شد", playAgain: "دوباره", turn: "نوبت", yourTurn: "نوبت شماست", createRoom: "ساخت اتاق", joinRoom: "ورود به اتاق", roomCode: "کد اتاق", room: "اتاق:", zoom: "بزرگنمایی" }
         };
 
-        // Environment Detection
         const isMobile = /Mobi|Android/i.test(navigator.userAgent) || ('ontouchstart' in window);
         if (isMobile) document.getElementById('joystick-wrapper').style.display = 'block';
 
@@ -205,7 +208,7 @@
             return count;
         }
 
-        // --- Unified Controls (PC + Mobile) ---
+        // --- View & Controls (Unified Mouse + Joystick) ---
         const ui = document.getElementById('ui-layer');
         let uiDrag = false, ux, uy, panDrag = false, lx, ly;
 
@@ -274,11 +277,17 @@
             joyActive = false; joyStick.style.transform = `translate(0,0)`; joyX = 0; joyY = 0; 
         });
 
-        function updateView() { document.getElementById('board').style.transform = `translate(${px}px, ${py}px) scale(${zoom})`; }
+        function updateView() { 
+            const limit = MAP_LIMIT * zoom;
+            px = Math.max(-limit, Math.min(limit, px));
+            py = Math.max(-limit, Math.min(limit, py));
+            document.getElementById('board').style.transform = `translate(${px}px, ${py}px) scale(${zoom})`; 
+        }
+
         function setZoom(v) { zoom = parseFloat(v); updateView(); }
 
         function gameLoop() {
-            if (joyX !== 0 || joyY !== 0) { px -= joyX * 5; py -= joyY * 5; updateView(); }
+            if (joyX !== 0 || joyY !== 0) { px -= joyX * 8; py -= joyY * 8; updateView(); }
             requestAnimationFrame(gameLoop);
         }
         gameLoop();
