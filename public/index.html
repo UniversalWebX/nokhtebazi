@@ -36,6 +36,9 @@
         .line.taken { box-shadow: 0 0 10px currentColor; z-index: 2; }
         .box { width: 50px; height: 50px; transition: background 0.4s; border-radius: 4px; }
 
+        .remote-cursor { position: absolute; width: 12px; height: 12px; border-radius: 50%; pointer-events: none; z-index: 1000; }
+        .cursor-label { position: absolute; top: -22px; left: 10px; font-size: 10px; background: rgba(0,0,0,0.8); padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+
         /* Joystick Styles */
         #joystick-wrapper { 
             position: fixed; bottom: 40px; left: 40px; width: 100px; height: 100px; 
@@ -51,6 +54,7 @@
         input { background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; margin-bottom: 8px; width: calc(100% - 22px); font-family: 'Orbitron'; font-size: 16px; }
         
         .status-box { border-left: 4px solid var(--accent); padding-left: 10px; margin-bottom: 15px; }
+        body.rtl .status-box { border-left: none; border-right: 4px solid var(--accent); padding-right: 10px; }
         #scoreboard { font-size: 12px; margin-top: 10px; border-top: 1px solid #333; padding-top: 10px; max-height: 100px; overflow-y: auto; }
         #copy-toast { font-size: 9px; color: var(--accent); opacity: 0; transition: 0.3s; }
     </style>
@@ -63,6 +67,12 @@
         <button id="play-btn" onclick="login()">Play Game</button>
     </div>
 
+    <div id="end-screen" style="display:none">
+        <h1 id="game-over-text">Game Over</h1>
+        <div id="final-stats"></div>
+        <button id="restart-btn" onclick="location.reload()">Play Again</button>
+    </div>
+
     <div id="game-screen" style="display:none">
         <div id="ui-layer">
             <div class="status-box">
@@ -70,15 +80,16 @@
                 <div id="turn-display">---</div>
             </div>
             <div id="room-controls">
-                <button onclick="createRoom()">Create Room</button>
+                <button id="create-btn" onclick="createRoom()">Create Room</button>
                 <input type="text" id="room-input" placeholder="Room Code" maxlength="6" style="margin-top: 10px;">
-                <button onclick="joinRoom()">Join Room</button>
+                <button id="join-btn" onclick="joinRoom()">Join Room</button>
             </div>
             <div id="active-info" style="display:none; text-align: center; cursor: pointer;" onclick="copyCode()">
                 <span id="room-label">Room:</span> <b id="room-id" style="color: var(--accent);"></b>
-                <div id="copy-toast">COPIED</div>
+                <div id="copy-toast">COPIED / کپی شد</div>
             </div>
             <div style="margin-top:15px;">
+                <label id="zoom-label" style="font-size: 9px; opacity: 0.6;">ZOOM LEVEL</label>
                 <input type="range" id="zoom-range" min="0.2" max="2.0" step="0.01" value="0.8" oninput="setZoom(this.value)" style="width:100%">
             </div>
             <button style="font-size: 10px; padding: 5px;" onclick="toggleLanguage()">FA / EN</button>
@@ -96,16 +107,30 @@
         let px = -500, py = -500, zoom = 0.8;
         let scores = {}, currentLang = 'en';
 
-        // Detect Mobile
+        const translations = {
+            en: { mainTitle: "Nokhtebazi", enterName: "Enter Name", playGame: "Play Game", gameOver: "Game Over", playAgain: "Play Again", turn: "Turn", yourTurn: "Your Turn", createRoom: "Create Room", joinRoom: "Join Room", roomCode: "Room Code", room: "Room:", zoom: "ZOOM LEVEL" },
+            fa: { mainTitle: "نقطه بازی", enterName: "نام خود را وارد کنید", playGame: "شروع بازی", gameOver: "بازی تمام شد", playAgain: "دوباره", turn: "نوبت", yourTurn: "نوبت شماست", createRoom: "ساخت اتاق", joinRoom: "ورود به اتاق", roomCode: "کد اتاق", room: "اتاق:", zoom: "بزرگنمایی" }
+        };
+
+        // Environment Detection
         const isMobile = /Mobi|Android/i.test(navigator.userAgent) || ('ontouchstart' in window);
-        if (isMobile) {
-            document.getElementById('joystick-wrapper').style.display = 'block';
-        }
+        if (isMobile) document.getElementById('joystick-wrapper').style.display = 'block';
 
         function toggleLanguage() {
             currentLang = currentLang === 'en' ? 'fa' : 'en';
+            const t = translations[currentLang];
             document.body.classList.toggle('rtl', currentLang === 'fa');
-            // ... (rest of translation logic same as previous)
+            document.getElementById('username').placeholder = t.enterName;
+            document.getElementById('play-btn').innerText = t.playGame;
+            document.getElementById('main-title').innerText = t.mainTitle;
+            document.getElementById('turn-label').innerText = t.turn;
+            document.getElementById('create-btn').innerText = t.createRoom;
+            document.getElementById('join-btn').innerText = t.joinRoom;
+            document.getElementById('room-input').placeholder = t.roomCode;
+            document.getElementById('room-label').innerText = t.room;
+            document.getElementById('zoom-label').innerText = t.zoom;
+            document.getElementById('game-over-text').innerText = t.gameOver;
+            document.getElementById('restart-btn').innerText = t.playAgain;
         }
 
         function copyCode() {
@@ -151,7 +176,7 @@
 
         socket.on('updateTurn', (data) => {
             isMyTurn = (data.currentPlayer === myName);
-            document.getElementById('turn-display').innerText = isMyTurn ? "Your Turn" : data.currentPlayer;
+            document.getElementById('turn-display').innerText = isMyTurn ? translations[currentLang].yourTurn : data.currentPlayer;
             let html = "";
             data.players.forEach(p => html += `<div style="color:${p.color}">${p.name}: ${scores[p.name] || 0}</div>`);
             document.getElementById('scoreboard').innerHTML = html;
@@ -180,28 +205,60 @@
             return count;
         }
 
-        // --- View & Controls ---
+        // --- Unified Controls (PC + Mobile) ---
         const ui = document.getElementById('ui-layer');
-        let uiDrag = false, ux, uy;
+        let uiDrag = false, ux, uy, panDrag = false, lx, ly;
 
-        ui.onmousedown = (e) => { if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') { uiDrag = true; ux = e.clientX - ui.offsetLeft; uy = e.clientY - ui.offsetTop; } };
-        window.onmousemove = (e) => {
-            if (uiDrag) {
-                ui.style.left = (e.clientX - ux) + 'px'; ui.style.top = (e.clientY - uy) + 'px';
+        const startAction = (e) => {
+            const isTouch = e.type === 'touchstart';
+            const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+            const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+            if (e.target.closest('#ui-layer')) {
+                if (e.target.tagName !== 'BUTTON' && e.target.tagName !== 'INPUT') {
+                    uiDrag = true; ux = clientX - ui.offsetLeft; uy = clientY - ui.offsetTop;
+                }
+            } else if (!e.target.closest('#joystick-wrapper')) {
+                panDrag = true; lx = clientX; ly = clientY;
             }
         };
-        window.onmouseup = () => { uiDrag = false; };
 
-        function setZoom(v) { zoom = parseFloat(v); updateView(); }
-        function updateView() { document.getElementById('board').style.transform = `translate(${px}px, ${py}px) scale(${zoom})`; }
+        const moveAction = (e) => {
+            const isTouch = e.type === 'touchmove';
+            const clientX = isTouch ? e.touches[0].clientX : e.clientX;
+            const clientY = isTouch ? e.touches[0].clientY : e.clientY;
+
+            if (uiDrag) {
+                ui.style.left = (clientX - ux) + 'px';
+                ui.style.top = (clientY - uy) + 'px';
+            }
+            if (panDrag) {
+                px += clientX - lx; py += clientY - ly;
+                lx = clientX; ly = clientY; 
+                updateView();
+            }
+            if (myRoom && !uiDrag && !panDrag) {
+                const rect = document.getElementById('board').getBoundingClientRect();
+                socket.emit('cursorMove', { x: (clientX - rect.left) / zoom, y: (clientY - rect.top) / zoom });
+            }
+        };
+
+        const endAction = () => { uiDrag = false; panDrag = false; };
+
+        window.addEventListener('mousedown', startAction);
+        window.addEventListener('touchstart', startAction, { passive: false });
+        window.addEventListener('mousemove', moveAction);
+        window.addEventListener('touchmove', moveAction, { passive: false });
+        window.addEventListener('mouseup', endAction);
+        window.addEventListener('touchend', endAction);
 
         // --- Joystick Logic ---
         const joyWrapper = document.getElementById('joystick-wrapper');
         const joyStick = document.getElementById('joystick-stick');
         let joyActive = false, joyX = 0, joyY = 0;
 
-        joyWrapper.ontouchstart = (e) => { joyActive = true; };
-        window.ontouchmove = (e) => {
+        joyWrapper.addEventListener('touchstart', (e) => { joyActive = true; e.stopPropagation(); }, { passive: false });
+        window.addEventListener('touchmove', (e) => {
             if (!joyActive) return;
             const touch = e.touches[0];
             const rect = joyWrapper.getBoundingClientRect();
@@ -211,15 +268,17 @@
             if (dist > 50) { dx *= 50/dist; dy *= 50/dist; }
             joyStick.style.transform = `translate(${dx}px, ${dy}px)`;
             joyX = dx / 10; joyY = dy / 10;
-        };
-        window.ontouchend = () => { 
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => { 
             joyActive = false; joyStick.style.transform = `translate(0,0)`; joyX = 0; joyY = 0; 
-        };
+        });
+
+        function updateView() { document.getElementById('board').style.transform = `translate(${px}px, ${py}px) scale(${zoom})`; }
+        function setZoom(v) { zoom = parseFloat(v); updateView(); }
 
         function gameLoop() {
-            if (joyX !== 0 || joyY !== 0) {
-                px -= joyX * 5; py -= joyY * 5; updateView();
-            }
+            if (joyX !== 0 || joyY !== 0) { px -= joyX * 5; py -= joyY * 5; updateView(); }
             requestAnimationFrame(gameLoop);
         }
         gameLoop();
@@ -234,6 +293,19 @@
                 document.getElementById('room-id').innerText = myRoom;
             }
         }
+
+        socket.on('cursorUpdate', (d) => {
+            let c = document.getElementById(`c-${d.id}`);
+            if (!c) {
+                c = document.createElement('div'); c.id = `c-${d.id}`;
+                c.className = 'remote-cursor';
+                c.innerHTML = `<div class="cursor-label" style="color:${d.color}">${d.name}</div>`;
+                document.getElementById('board').appendChild(c);
+            }
+            c.style.background = d.color; c.style.left = d.x + 'px'; c.style.top = d.y + 'px';
+        });
+        socket.on('cursorRemove', (id) => { const c = document.getElementById(`c-${id}`); if(c) c.remove(); });
+        window.onwheel = (e) => { zoom = Math.min(Math.max(zoom + (e.deltaY < 0 ? 0.05 : -0.05), 0.1), 2.0); document.getElementById('zoom-range').value = zoom; updateView(); };
     </script>
 </body>
 </html>
