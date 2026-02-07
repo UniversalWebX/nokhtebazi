@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html>
 <head>
@@ -7,28 +6,25 @@
     <style>
         :root { --accent: #00f2ff; --bg: #0a0a0a; }
         body { font-family: 'Orbitron', sans-serif; background: var(--bg); color: #fff; margin: 0; overflow: hidden; }
+        body.rtl { direction: rtl; }
         
         #auth-screen, #end-screen { 
             position: fixed; inset: 0; background: #000;
             display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000;
         }
-
         #ui-layer { 
             position: fixed; top: 20px; left: 20px; background: rgba(30, 30, 35, 0.95); 
             padding: 20px; border-radius: 12px; z-index: 500; border: 1px solid rgba(255,255,255,0.1);
             backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,0.5);
             cursor: move; width: 220px;
         }
-
         #board-container { width: 100vw; height: 100vh; overflow: hidden; position: relative; }
-
         #board { 
             position: absolute; display: grid; transform-origin: 0 0;
             grid-template-columns: repeat(25, 8px 50px) 8px;
             grid-template-rows: repeat(25, 8px 50px) 8px;
             padding: 200px;
         }
-
         .dot { width: 8px; height: 8px; background: #555; border-radius: 50%; }
         .line { background: #1a1a1a; cursor: pointer; }
         .line:hover:not(.taken) { background: #333; }
@@ -43,42 +39,46 @@
         button { background: var(--accent); border: none; color: #000; padding: 12px; border-radius: 6px; cursor: pointer; font-family: 'Orbitron'; font-weight: bold; width: 100%; margin-top: 8px; }
         input { background: #222; border: 1px solid #444; color: white; padding: 10px; border-radius: 6px; margin-bottom: 8px; width: calc(100% - 22px); font-family: 'Orbitron'; }
         .status-box { border-left: 4px solid var(--accent); padding-left: 10px; margin-bottom: 20px; }
+        body.rtl .status-box { border-left: none; border-right: 4px solid var(--accent); padding-left: 0; padding-right: 10px; }
         #scoreboard { font-size: 12px; margin-top: 15px; border-top: 1px solid #333; padding-top: 10px; }
+        
+        #lang-btn { position: absolute; top: 10px; right: 10px; width: auto; padding: 5px 10px; font-size: 10px; opacity: 0.7; }
     </style>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
-
     <div id="auth-screen">
-        <h1 style="color: var(--accent);">Nokhtebazi</h1>
+        <button id="lang-btn" onclick="toggleLanguage()">FA / EN</button>
+        <h1 id="main-title" style="color: var(--accent);">Nokhtebazi</h1>
         <input type="text" id="username" placeholder="Enter Name">
         <button id="play-btn" onclick="login()">Play Game</button>
     </div>
 
     <div id="end-screen" style="display:none">
-        <h1>Game Over</h1>
+        <h1 id="game-over-text">Game Over</h1>
         <div id="final-stats"></div>
-        <button onclick="location.reload()">Play Again</button>
+        <button id="restart-btn" onclick="location.reload()">Play Again</button>
     </div>
 
     <div id="game-screen" style="display:none">
         <div id="ui-layer">
             <div class="status-box">
-                <small>Turn</small>
+                <small id="turn-label">Turn</small>
                 <div id="turn-display">---</div>
             </div>
             <div id="room-controls">
-                <button onclick="createRoom()">Create Room</button>
+                <button id="create-btn" onclick="createRoom()">Create Room</button>
                 <input type="text" id="room-input" placeholder="Room Code" maxlength="6" style="margin-top: 10px;">
-                <button onclick="joinRoom()">Join Room</button>
+                <button id="join-btn" onclick="joinRoom()">Join Room</button>
             </div>
             <div id="active-info" style="display:none; text-align: center;">
-                Room: <b id="room-id" style="color: var(--accent);"></b>
+                <span id="room-label">Room:</span> <b id="room-id" style="color: var(--accent);"></b>
             </div>
             <div style="margin-top:20px;">
-                <label style="font-size: 9px; opacity: 0.6;">ZOOM LEVEL</label>
+                <label id="zoom-label" style="font-size: 9px; opacity: 0.6;">ZOOM LEVEL</label>
                 <input type="range" id="zoom-range" min="0.1" max="2.0" step="0.01" value="1.0" oninput="setZoom(this.value)">
             </div>
+            <button id="game-lang-btn" style="font-size: 10px; padding: 5px;" onclick="toggleLanguage()">FA / EN</button>
             <div id="scoreboard"></div>
         </div>
         <div id="board-container">
@@ -92,6 +92,76 @@
         let myName, myRoom, isMyTurn = false, boxesLeft = 625;
         let px = 50, py = 50, zoom = 1.0;
         let scores = {};
+        let currentLang = 'en';
+
+        const translations = {
+            en: {
+                mainTitle: "Nokhtebazi",
+                enterName: "Enter Name",
+                playGame: "Play Game",
+                gameOver: "Game Over",
+                playAgain: "Play Again",
+                turn: "Turn",
+                yourTurn: "Your Turn",
+                createRoom: "Create Room",
+                joinRoom: "Join Room",
+                roomCode: "Room Code",
+                room: "Room:",
+                zoom: "ZOOM LEVEL"
+            },
+            fa: {
+                mainTitle: "نقطه بازی",
+                enterName: "نام خود را وارد کنید",
+                playGame: "شروع بازی",
+                gameOver: "بازی تمام شد",
+                playAgain: "دوباره",
+                turn: "نوبت",
+                yourTurn: "نوبت شماست",
+                createRoom: "ساخت اتاق",
+                joinRoom: "ورود به اتاق",
+                roomCode: "کد اتاق",
+                room: "اتاق:",
+                zoom: "بزرگنمایی"
+            }
+        };
+
+        function toggleLanguage() {
+            currentLang = currentLang === 'en' ? 'fa' : 'en';
+            const t = translations[currentLang];
+            
+            // Apply text direction
+            document.body.classList.toggle('rtl', currentLang === 'fa');
+
+            // Update Auth Screen
+            document.getElementById('username').placeholder = t.enterName;
+            document.getElementById('play-btn').innerText = t.playGame;
+            document.getElementById('main-title').innerText = t.mainTitle;
+
+            // Update Game Screen
+            document.getElementById('turn-label').innerText = t.turn;
+            document.getElementById('create-btn').innerText = t.createRoom;
+            document.getElementById('join-btn').innerText = t.joinRoom;
+            document.getElementById('room-input').placeholder = t.roomCode;
+            document.getElementById('room-label').innerText = t.room;
+            document.getElementById('zoom-label').innerText = t.zoom;
+
+            // Update End Screen
+            document.getElementById('game-over-text').innerText = t.gameOver;
+            document.getElementById('restart-btn').innerText = t.playAgain;
+
+            // Refresh turn display if active
+            if(myName) updateTurnDisplay(document.getElementById('turn-display').dataset.lastPlayer);
+        }
+
+        function updateTurnDisplay(player) {
+            const display = document.getElementById('turn-display');
+            display.dataset.lastPlayer = player;
+            if (player === myName) {
+                display.innerText = translations[currentLang].yourTurn;
+            } else {
+                display.innerText = player || "---";
+            }
+        }
 
         // Login Logic
         function login() {
@@ -140,7 +210,7 @@
 
         socket.on('updateTurn', (data) => {
             isMyTurn = (data.currentPlayer === myName);
-            document.getElementById('turn-display').innerText = isMyTurn ? "Your Turn" : data.currentPlayer;
+            updateTurnDisplay(data.currentPlayer);
             let html = "";
             data.players.forEach(p => html += `<div style="color:${p.color}">${p.name}: ${scores[p.name] || 0}</div>`);
             document.getElementById('scoreboard').innerHTML = html;
@@ -220,7 +290,7 @@
 
         let panDrag = false, lx, ly;
         window.onmousedown = (e) => { if(!e.target.closest('#ui-layer')) { panDrag=true; lx=e.clientX; ly=e.clientY; } };
-
+        
         function createRoom() { const c = Math.random().toString(36).substring(2, 8).toUpperCase(); document.getElementById('room-input').value = c; joinRoom(); }
         function joinRoom() { 
             myRoom = document.getElementById('room-input').value.toUpperCase(); 
